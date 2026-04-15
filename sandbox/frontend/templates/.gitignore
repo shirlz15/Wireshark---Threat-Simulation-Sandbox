@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+capture/*.pcap
+capture/*.pcapng
+capture/*.log
+reports/*.txt
+reports/*.pdf
+.env
+*.egg-info/
+dist/
+build/
