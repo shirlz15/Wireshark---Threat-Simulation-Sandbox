@@ -1,13 +1,25 @@
 """
-simulator.py
-Two modes:
+simulator.py v3.0
+Three modes:
   1. Simulated  — fake log events (no real network needed)
-  2. Live       — reads a .pcap file captured by Wireshark
+  2. Pcap File  — reads a .pcap file captured by Wireshark
+  3. LIVE       — real-time packet capture using Scapy
 """
 
 import random
 import os
+import sys
+import time
 from datetime import datetime, timedelta
+
+# Try to import Scapy for live capture
+try:
+    from scapy.all import sniff, IP, TCP, UDP, ICMP
+    from scapy.error import Scapy_Exception
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
+
 
 # ── Simulated scenarios ──────────────────────────────────────────────────────
 
@@ -116,15 +128,18 @@ def parse_pcap(filepath: str) -> list:
     into the same event format as simulated scenarios.
     Requires: pip install scapy
     """
-    try:
-        from scapy.all import rdpcap, IP, TCP, UDP
-    except ImportError:
-        return [{"error": "scapy not installed — run: pip install scapy"}]
+    if not SCAPY_AVAILABLE:
+        return [{"error": "scapy not installed — run: pip install scapy --break-system-packages"}]
 
     if not os.path.exists(filepath):
         return [{"error": f"File not found: {filepath}"}]
 
-    packets = rdpcap(filepath)
+    try:
+        from scapy.all import rdpcap
+        packets = rdpcap(filepath)
+    except Exception as e:
+        return [{"error": f"Failed to read pcap: {str(e)}"}]
+
     events = []
     port_counts = {}
     ip_counts = {}
@@ -163,3 +178,189 @@ def parse_pcap(filepath: str) -> list:
         })
 
     return events
+
+
+# ── LIVE PACKET CAPTURE (NEW) ─────────────────────────────────────────────────
+
+def check_capture_permissions() -> dict:
+    """
+    Check if we have the necessary permissions for live packet capture.
+    Returns: {"ok": True/False, "error": "message"}
+    """
+    if not SCAPY_AVAILABLE:
+        return {
+            "ok": False,
+            "error": "Scapy not installed. Run: pip install scapy --break-system-packages"
+        }
+    
+    # Check if running as root/admin
+    if os.name == 'posix':  # Linux/Mac
+        if os.geteuid() != 0:
+            return {
+                "ok": False,
+                "error": "Root privileges required. Run with: sudo python3 app.py"
+            }
+    elif os.name == 'nt':  # Windows
+        try:
+            import ctypes
+            if not ctypes.windll.shell32.IsUserAnAdmin():
+                return {
+                    "ok": False,
+                    "error": "Admin privileges required. Run as Administrator."
+                }
+        except:
+            return {
+                "ok": False,
+                "error": "Unable to check admin status on Windows"
+            }
+    
+    return {"ok": True, "error": None}
+
+
+def capture_live_packets(callback, running_flag):
+    """
+    LIVE PACKET CAPTURE using Scapy
+    
+    Captures real network traffic and extracts ONLY metadata:
+    - Source IP
+    - Destination IP
+    - Destination Port
+    - Protocol
+    - Timestamp
+    
+    NO PAYLOAD DATA IS CAPTURED (educational/safety)
+    
+    Args:
+        callback: Function to call with each packet's metadata
+        running_flag: Boolean or function that returns whether to keep capturing
+    """
+    if not SCAPY_AVAILABLE:
+        print("⚠️  Scapy not available for live capture")
+        return
+    
+    print("🔴 Starting live packet capture...")
+    print("   Capturing metadata only (no payload)")
+    print("   Press Ctrl+C to stop")
+    
+    def packet_handler(packet):
+        """Process each captured packet - extract metadata only"""
+        try:
+            # Only process IP packets
+            if not packet.haslayer(IP):
+                return
+            
+            src_ip = packet[IP].src
+            dst_ip = packet[IP].dst
+            
+            # Determine protocol and port
+            if packet.haslayer(TCP):
+                protocol = "TCP"
+                dst_port = packet[TCP].dport
+                packet_size = len(packet)
+            elif packet.haslayer(UDP):
+                protocol = "UDP"
+                dst_port = packet[UDP].dport
+                packet_size = len(packet)
+            elif packet.haslayer(ICMP):
+                protocol = "ICMP"
+                dst_port = 0
+                packet_size = len(packet)
+            else:
+                protocol = "OTHER"
+                dst_port = 0
+                packet_size = len(packet)
+            
+            # Create metadata packet (NO PAYLOAD)
+            packet_data = {
+                "src_ip": src_ip,
+                "dst_ip": dst_ip,
+                "dst_port": dst_port,
+                "protocol": protocol,
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "size": packet_size,
+            }
+            
+            # Send to callback for processing
+            callback(packet_data)
+            
+        except Exception as e:
+            print(f"⚠️  Error processing packet: {e}")
+    
+    try:
+        # Start sniffing
+        # filter="ip" - only capture IP packets
+        # prn=packet_handler - process each packet
+        # store=0 - don't store packets in memory (safety)
+        # stop_filter - stop when running_flag becomes False
+        sniff(
+            filter="ip",
+            prn=packet_handler,
+            store=0,  # Don't store packets (memory safety)
+            stop_filter=lambda x: not running_flag
+        )
+    except KeyboardInterrupt:
+        print("\n🛑 Live capture stopped by user")
+    except PermissionError:
+        print("❌ Permission denied. Run with sudo/admin privileges")
+    except Scapy_Exception as e:
+        print(f"❌ Scapy error: {e}")
+    except Exception as e:
+        print(f"❌ Capture error: {e}")
+
+
+# ── CLI test mode ─────────────────────────────────────────────────────────────
+
+def test_live_capture():
+    """Test function to verify live capture works independently"""
+    print("\n" + "="*60)
+    print("LIVE CAPTURE TEST MODE")
+    print("="*60)
+    
+    # Check permissions
+    perm = check_capture_permissions()
+    if not perm["ok"]:
+        print(f"❌ {perm['error']}")
+        return
+    
+    print("✓ Permissions OK")
+    print("\nCapturing 10 packets for testing...")
+    print("(Generate some network traffic - browse web, ping, etc.)\n")
+    
+    packet_count = [0]  # Use list to modify in nested function
+    
+    def test_callback(packet_data):
+        packet_count[0] += 1
+        print(f"  [{packet_count[0]}] {packet_data['protocol']:4} "
+              f"{packet_data['src_ip']:15} → {packet_data['dst_ip']:15}:{packet_data['dst_port']:<5}  "
+              f"{packet_data['size']} bytes")
+        
+        if packet_count[0] >= 10:
+            return True  # Stop after 10 packets
+    
+    try:
+        sniff(
+            filter="ip",
+            prn=lambda pkt: test_callback({
+                "src_ip": pkt[IP].src if pkt.haslayer(IP) else "unknown",
+                "dst_ip": pkt[IP].dst if pkt.haslayer(IP) else "unknown",
+                "dst_port": pkt[TCP].dport if pkt.haslayer(TCP) else (pkt[UDP].dport if pkt.haslayer(UDP) else 0),
+                "protocol": "TCP" if pkt.haslayer(TCP) else ("UDP" if pkt.haslayer(UDP) else "OTHER"),
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "size": len(pkt)
+            }),
+            count=10,
+            store=0
+        )
+        print("\n✓ Test completed successfully!")
+        print("  Live capture is working correctly")
+    except Exception as e:
+        print(f"\n❌ Test failed: {e}")
+
+
+if __name__ == "__main__":
+    # If run directly, test live capture
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        test_live_capture()
+    else:
+        print("Usage:")
+        print("  python simulator.py test    # Test live capture")

@@ -1,0 +1,257 @@
+<!-- 
+  dashboard_ui_update.html
+  
+  ADD THIS TO YOUR EXISTING dashboard.html
+  Insert in the control panel section (where START/STOP/RESET buttons are)
+-->
+
+<style>
+/* Mode Toggle Styles */
+.mode-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(15, 17, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.mode-toggle-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+}
+
+.mode-toggle-switch {
+    position: relative;
+    width: 140px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.mode-toggle-switch.live-mode {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.mode-toggle-slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 68px;
+    height: 28px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    border-radius: 14px;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.mode-toggle-switch.live-mode .mode-toggle-slider {
+    left: calc(100% - 70px);
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.live-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #ef4444;
+    animation: pulse 2s infinite;
+}
+
+.live-indicator.active {
+    display: flex;
+}
+
+.live-indicator-dot {
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    animation: blink 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.permission-warning {
+    padding: 10px 14px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 6px;
+    color: #f59e0b;
+    font-size: 12px;
+    margin-top: 8px;
+    display: none;
+}
+
+.permission-warning.show {
+    display: block;
+}
+</style>
+
+<!-- HTML Structure - Add this to your control panel -->
+<div class="mode-toggle-container">
+    <span class="mode-toggle-label">CAPTURE MODE:</span>
+    
+    <div class="mode-toggle-switch" id="modeToggle" onclick="toggleMode()">
+        <div class="mode-toggle-slider">SIMULATION</div>
+    </div>
+    
+    <div class="live-indicator" id="liveIndicator">
+        <div class="live-indicator-dot"></div>
+        LIVE CAPTURE ACTIVE
+    </div>
+</div>
+
+<div class="permission-warning" id="permissionWarning">
+    ⚠️ <span id="permissionMessage"></span>
+</div>
+
+<script>
+// Global mode state
+let currentMode = 'simulation';
+
+// Toggle between simulation and live mode
+async function toggleMode() {
+    const newMode = currentMode === 'simulation' ? 'live' : 'simulation';
+    
+    try {
+        const response = await fetch('/api/mode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ mode: newMode })
+        });
+        
+        const data = await response.json();
+        
+        if (data.ok) {
+            currentMode = data.mode;
+            updateModeUI(currentMode);
+            console.log(`✓ Switched to ${currentMode} mode`);
+        } else {
+            // Show error
+            showPermissionWarning(data.error);
+            console.error('Mode switch failed:', data.error);
+        }
+    } catch (error) {
+        console.error('Error switching mode:', error);
+        showPermissionWarning('Network error - could not switch mode');
+    }
+}
+
+// Update UI to reflect current mode
+function updateModeUI(mode) {
+    const toggle = document.getElementById('modeToggle');
+    const slider = toggle.querySelector('.mode-toggle-slider');
+    const indicator = document.getElementById('liveIndicator');
+    const warning = document.getElementById('permissionWarning');
+    
+    if (mode === 'live') {
+        toggle.classList.add('live-mode');
+        slider.textContent = 'LIVE';
+        indicator.classList.add('active');
+        warning.classList.remove('show');
+    } else {
+        toggle.classList.remove('live-mode');
+        slider.textContent = 'SIMULATION';
+        indicator.classList.remove('active');
+    }
+}
+
+// Show permission warning
+function showPermissionWarning(message) {
+    const warning = document.getElementById('permissionWarning');
+    const messageEl = document.getElementById('permissionMessage');
+    messageEl.textContent = message;
+    warning.classList.add('show');
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+        warning.classList.remove('show');
+    }, 10000);
+}
+
+// Update existing fetchEvents function to handle mode
+// Modify your existing fetchEvents() to include this:
+function fetchEvents() {
+    // ... your existing code ...
+    
+    fetch(`/api/events?since=${lastEventId}`)
+        .then(r => r.json())
+        .then(data => {
+            // Update mode UI if it changed server-side
+            if (data.mode && data.mode !== currentMode) {
+                currentMode = data.mode;
+                updateModeUI(currentMode);
+            }
+            
+            // Show permission warning if exists
+            if (data.permission_warning) {
+                showPermissionWarning(data.permission_warning);
+            }
+            
+            // ... rest of your existing event processing ...
+        });
+}
+
+// Initialize mode on page load
+document.addEventListener('DOMContentLoaded', () => {
+    fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+            currentMode = data.mode || 'simulation';
+            updateModeUI(currentMode);
+            
+            if (data.permission_warning) {
+                showPermissionWarning(data.permission_warning);
+            }
+            
+            if (!data.scapy_available) {
+                showPermissionWarning('Scapy not installed - Live mode unavailable');
+            }
+        });
+});
+</script>
+
+<!-- 
+  INTEGRATION INSTRUCTIONS:
+  
+  1. Add the <style> section to your dashboard.html <head> or existing <style> block
+  2. Add the HTML structure to your control panel (near START/STOP/RESET buttons)
+  3. Add the <script> section before your closing </body> tag
+  4. Modify your existing fetchEvents() to include the mode checking code
+  
+  The toggle will:
+  - Show current mode (SIMULATION or LIVE)
+  - Display "LIVE CAPTURE ACTIVE" indicator when in live mode
+  - Show permission warnings if live mode cannot be activated
+  - Automatically sync with backend mode changes
+-->
