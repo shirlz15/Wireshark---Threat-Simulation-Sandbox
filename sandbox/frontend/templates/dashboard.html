@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THREAT SANDBOX // LIVE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Exo+2:wght@300;400;600;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #030608;
+  --bg2:      #07101a;
+  --bg3:      #0b1825;
+  --border:   #0f2236;
+  --crit:     #ff3a5c;
+  --susp:     #ffba0a;
+  --safe:     #00e87a;
+  --info:     #00c3ff;
+  --dim:      #1a3550;
+  --text:     #7ab8d6;
+  --textbr:   #c2e0f2;
+  --purple:   #b06cff;
+  --mono:     'Space Mono', monospace;
+  --display:  'Orbitron', sans-serif;
+  --body:     'Exo 2', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scanline overlay */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,180,255,0.015) 3px, rgba(0,180,255,0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── HEADER ──────────────────────────────────────────────────────── */
+header {
+  height: 52px;
+  background: linear-gradient(90deg, #020c16 0%, #030f1e 60%, #020c16 100%);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 20px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+header::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(0,195,255,0.05) 50%, transparent 100%);
+  animation: sweep 5s linear infinite;
+}
+@keyframes sweep { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+
+.logo {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.logo-icon {
+  width: 34px; height: 34px;
+  border: 2px solid var(--info);
+  display: flex; align-items: center; justify-content: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: rgba(0,195,255,0.08);
+  box-shadow: 0 0 12px rgba(0,195,255,0.3);
+  animation: hexPulse 3s ease-in-out infinite;
+}
+@keyframes hexPulse { 0%,100%{box-shadow:0 0 12px rgba(0,195,255,0.3)} 50%{box-shadow:0 0 24px rgba(0,195,255,0.6)} }
+.logo-icon svg { width: 18px; height: 18px; }
+.logo-text { font-family: var(--display); }
+.logo-title { font-size: 11px; font-weight: 900; color: var(--info); letter-spacing: 3px; }
+.logo-sub { font-size: 7px; color: var(--dim); letter-spacing: 4px; }
+
+.h-stats {
+  display: flex; gap: 2px; margin-left: 16px;
+}
+.hstat {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0 14px;
+  border-left: 1px solid var(--border);
+}
+.hstat:first-child { border-left: none; }
+.hstat-val {
+  font-family: var(--display);
+  font-size: 20px; font-weight: 700;
+  line-height: 1;
+  transition: color 0.3s;
+}
+.hstat-val.crit  { color: var(--crit); text-shadow: 0 0 12px rgba(255,58,92,0.6); }
+.hstat-val.susp  { color: var(--susp); text-shadow: 0 0 12px rgba(255,186,10,0.5); }
+.hstat-val.safe  { color: var(--safe); text-shadow: 0 0 12px rgba(0,232,122,0.5); }
+.hstat-val.total { color: var(--info); text-shadow: 0 0 12px rgba(0,195,255,0.4); }
+.hstat-label { font-size: 7px; color: var(--dim); letter-spacing: 2px; margin-top: 2px; }
+
+.h-threat-indicator {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 10px;
+}
+.threat-meter {
+  display: flex; align-items: center; gap: 8px;
+}
+.tm-label { font-size: 8px; color: var(--dim); letter-spacing: 2px; }
+.tm-bars { display: flex; gap: 3px; }
+.tm-bar {
+  width: 6px; height: 20px;
+  background: var(--border);
+  border-radius: 2px;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.tm-bar.l1 { background: var(--safe); box-shadow: 0 0 6px var(--safe); }
+.tm-bar.l2 { background: var(--safe); box-shadow: 0 0 6px var(--safe); }
+.tm-bar.l3 { background: var(--susp); box-shadow: 0 0 6px var(--susp); }
+.tm-bar.l4 { background: var(--susp); box-shadow: 0 0 6px var(--susp); }
+.tm-bar.l5 { background: var(--crit); box-shadow: 0 0 6px var(--crit); }
+
+.status-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 14px;
+  border: 1px solid var(--dim);
+  font-size: 9px; letter-spacing: 3px;
+  color: var(--dim);
+  clip-path: polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%);
+  transition: all 0.3s;
+}
+.status-pill.live { border-color: var(--safe); color: var(--safe); box-shadow: 0 0 12px rgba(0,232,122,0.2); }
+.status-pill.paused { border-color: var(--susp); color: var(--susp); }
+.pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); transition: all 0.3s; }
+.status-pill.live .pulse-dot { background: var(--safe); animation: dot-blink 1.2s ease-in-out infinite; }
+.status-pill.paused .pulse-dot { background: var(--susp); }
+@keyframes dot-blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(0.6)} }
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 16px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: 1px;
+  clip-path: polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+  transition: all 0.2s;
+}
+.btn:hover { border-color: var(--info); color: var(--info); box-shadow: 0 0 10px rgba(0,195,255,0.2); }
+.btn.start { border-color: rgba(0,232,122,.4); color: var(--safe); }
+.btn.start:hover { box-shadow: 0 0 12px rgba(0,232,122,0.3); }
+.btn.stop  { border-color: rgba(255,58,92,.4); color: var(--crit); }
+.btn.stop:hover { box-shadow: 0 0 12px rgba(255,58,92,0.3); }
+.btn.reset { border-color: rgba(255,186,10,.3); color: var(--susp); }
+.btn.report { border-color: rgba(0,195,255,.4); color: var(--info); }
+
+/* ── LAYOUT ──────────────────────────────────────────────────────── */
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 310px 1fr 270px;
+  grid-template-rows: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+
+.panel {
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  overflow: hidden; position: relative;
+}
+
+.panel-head {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 7px 12px;
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0; height: 32px;
+}
+.ph-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--info); box-shadow: 0 0 5px var(--info);
+}
+.ph-title {
+  font-size: 8px; letter-spacing: 3px; color: var(--info);
+  font-family: var(--display); font-weight: 700;
+}
+.ph-badge { margin-left: auto; font-size: 8px; color: var(--dim); letter-spacing: 1px; }
+
+/* Spans */
+.p-left    { grid-column: 1; grid-row: 1 / span 2; }
+.p-center-top { grid-column: 2; grid-row: 1; }
+.p-center-bot { grid-column: 2; grid-row: 2; }
+.p-right-top  { grid-column: 3; grid-row: 1; }
+.p-right-bot  { grid-column: 3; grid-row: 2; }
+
+/* ── NETWORK TOPOLOGY ────────────────────────────────────────────── */
+#netCanvas { flex: 1; display: block; }
+
+/* ── TRAFFIC WAVEFORM ────────────────────────────────────────────── */
+#trafficCanvas { flex: 1; display: block; }
+
+/* ── LIVE FEED ───────────────────────────────────────────────────── */
+.feed {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  font-size: 11px;
+}
+.feed::-webkit-scrollbar { width: 3px; }
+.feed::-webkit-scrollbar-thumb { background: var(--border); }
+
+.feed-row {
+  display: grid;
+  grid-template-columns: 65px 110px 42px 1fr 100px;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(15,34,54,0.5);
+  align-items: center;
+  transition: background 0.15s;
+  animation: slideIn 0.2s ease;
+}
+@keyframes slideIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:none} }
+.feed-row:hover { background: rgba(0,195,255,0.04); }
+.feed-row.critical { border-left: 2px solid var(--crit); }
+.feed-row.suspicious { border-left: 2px solid var(--susp); }
+.feed-row.safe { border-left: 2px solid rgba(0,232,122,0.3); }
+
+.col-ts  { color: var(--dim); font-size: 9px; }
+.col-src { color: var(--textbr); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-proto { font-size: 8px; color: var(--purple); }
+.col-det { color: var(--text); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--body); }
+
+.badge {
+  font-size: 7px; padding: 2px 6px; letter-spacing: 1px;
+  text-align: center; font-family: var(--display);
+  clip-path: polygon(4px 0%,100% 0%,calc(100% - 4px) 100%,0% 100%);
+}
+.badge.critical { background: rgba(255,58,92,0.15); color: var(--crit); border: 1px solid rgba(255,58,92,0.3); }
+.badge.suspicious { background: rgba(255,186,10,0.12); color: var(--susp); border: 1px solid rgba(255,186,10,0.3); }
+.badge.safe { background: rgba(0,232,122,0.08); color: var(--safe); border: 1px solid rgba(0,232,122,0.2); }
+
+/* Feed table header */
+.feed-header {
+  display: grid;
+  grid-template-columns: 65px 110px 42px 1fr 100px;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.feed-header span {
+  font-size: 7px; color: var(--dim); letter-spacing: 2px; font-family: var(--display);
+}
+
+/* ── THREAT DISTRIBUTION ─────────────────────────────────────────── */
+.threat-section {
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.tbar-row { display: flex; flex-direction: column; gap: 3px; }
+.tbar-info { display: flex; justify-content: space-between; align-items: center; }
+.tbar-name { font-size: 8px; color: var(--textbr); letter-spacing: 1px; font-family: var(--body); }
+.tbar-count { font-family: var(--display); font-size: 10px; }
+.tbar-track { height: 5px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.tbar-fill { height: 100%; width: 0%; border-radius: 2px; transition: width 0.5s ease; }
+.tbar-fill.c-scan    { background: linear-gradient(90deg, #ff3a5c, #ff7a8a); box-shadow: 0 0 8px rgba(255,58,92,0.4); }
+.tbar-fill.c-brute   { background: linear-gradient(90deg, #b06cff, #d09bff); box-shadow: 0 0 8px rgba(176,108,255,0.4); }
+.tbar-fill.c-flood   { background: linear-gradient(90deg, #ff7a00, #ffb050); box-shadow: 0 0 8px rgba(255,122,0,0.4); }
+.tbar-fill.c-sens    { background: linear-gradient(90deg, #ffba0a, #ffda70); box-shadow: 0 0 8px rgba(255,186,10,0.4); }
+.tbar-fill.c-normal  { background: linear-gradient(90deg, #00e87a, #80ffbe); box-shadow: 0 0 8px rgba(0,232,122,0.3); }
+
+/* ── BATTLE LOG ──────────────────────────────────────────────────── */
+.battle-wrap {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  overflow: hidden;
+  min-height: 0;
+}
+.battle-col {
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.battle-head {
+  padding: 5px 10px; font-size: 8px; letter-spacing: 2px;
+  background: var(--bg2); flex-shrink: 0;
+  font-family: var(--display);
+}
+.battle-head.atk { color: var(--crit); border-bottom: 1px solid rgba(255,58,92,0.2); }
+.battle-head.def { color: var(--safe); border-bottom: 1px solid rgba(0,232,122,0.2); }
+.battle-feed {
+  flex: 1; overflow-y: auto; padding: 4px;
+  font-size: 9px; font-family: var(--body);
+}
+.battle-feed::-webkit-scrollbar { width: 2px; }
+.battle-feed::-webkit-scrollbar-thumb { background: var(--border); }
+.bevent {
+  padding: 3px 6px; margin-bottom: 2px;
+  border-radius: 2px; animation: fadeUp 0.3s ease;
+}
+.bevent.atk { color: #ff8fa0; background: rgba(255,58,92,0.06); border-left: 2px solid rgba(255,58,92,0.3); }
+.bevent.def { color: #80ffbe; background: rgba(0,232,122,0.06); border-left: 2px solid rgba(0,232,122,0.3); }
+.bts { color: var(--dim); margin-right: 6px; font-family: var(--mono); font-size: 8px; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+/* ── TOP ATTACKERS ───────────────────────────────────────────────── */
+.atk-list { padding: 6px 10px; display: flex; flex-direction: column; gap: 5px; }
+.atk-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; align-items: center; }
+.atk-rank { font-size: 8px; color: var(--dim); font-family: var(--display); }
+.atk-info { display: flex; flex-direction: column; gap: 2px; }
+.atk-ip   { font-size: 9px; color: var(--textbr); font-family: var(--mono); }
+.atk-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 1px; }
+.atk-bar  { height: 100%; background: linear-gradient(90deg, var(--crit), var(--purple)); border-radius: 2px; transition: width 0.5s; }
+.atk-hits { font-family: var(--display); font-size: 11px; color: var(--crit); }
+
+/* ── HEATMAP ─────────────────────────────────────────────────────── */
+.heatmap-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; border-top: 1px solid var(--border); }
+#heatmapCanvas { flex: 1; display: block; }
+
+/* ── MITRE PANEL ─────────────────────────────────────────────────── */
+.mitre-section {
+  padding: 6px 10px;
+  display: flex; flex-direction: column; gap: 3px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.mitre-title { font-size: 7px; color: var(--dim); letter-spacing: 3px; font-family: var(--display); margin-bottom: 3px; }
+.mitre-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(15,34,54,0.5);
+}
+.mitre-id { font-size: 8px; color: var(--info); font-family: var(--mono); min-width: 60px; }
+.mitre-name { font-size: 8px; color: var(--text); font-family: var(--body); }
+.mitre-count {
+  margin-left: auto; font-family: var(--display); font-size: 9px;
+  color: var(--susp);
+}
+
+/* ── TOOLTIP ─────────────────────────────────────────────────────── */
+.tooltip {
+  position: fixed; z-index: 1000;
+  background: rgba(3,6,8,0.97);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--info);
+  padding: 10px 14px;
+  display: none;
+  min-width: 240px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,195,255,0.1);
+  pointer-events: none;
+}
+.tt-row { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(15,34,54,0.5); font-size: 10px; }
+.tt-row:last-child { border-bottom: none; }
+.tt-key { color: var(--dim); min-width: 60px; letter-spacing: 1px; font-size: 9px; }
+.tt-val { color: var(--textbr); }
+.tt-mitre { margin-top: 6px; font-size: 9px; color: var(--info); padding: 4px 6px; background: rgba(0,195,255,0.05); border-left: 2px solid var(--info); }
+
+/* ── ALERT FLASH ─────────────────────────────────────────────────── */
+.alert-flash {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,58,92,0.12);
+  border: 1px solid rgba(255,58,92,0.5);
+  color: var(--crit); padding: 8px 20px;
+  font-family: var(--display); font-size: 11px; letter-spacing: 2px;
+  z-index: 500; animation: alertAnim 0.3s ease;
+  box-shadow: 0 0 20px rgba(255,58,92,0.3);
+  clip-path: polygon(10px 0%,100% 0%,calc(100% - 10px) 100%,0% 100%);
+}
+@keyframes alertAnim { from{opacity:0;transform:translateX(-50%) translateY(-10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+
+/* ── PACKET RATE INDICATOR ───────────────────────────────────────── */
+.rate-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(0,195,255,0.06);
+  border: 1px solid rgba(0,195,255,0.2);
+  padding: 2px 8px;
+  font-size: 9px; letter-spacing: 1px;
+  clip-path: polygon(4px 0%,100% 0%,calc(100% - 4px) 100%,0% 100%);
+}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#00c3ff" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div class="logo-text">
+      <div class="logo-title">THREAT SANDBOX</div>
+      <div class="logo-sub">LIVE DETECTION SYSTEM v2.0</div>
+    </div>
+  </div>
+
+  <div class="h-stats">
+    <div class="hstat">
+      <div class="hstat-val total" id="st">0</div>
+      <div class="hstat-label">TOTAL</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val crit" id="sc">0</div>
+      <div class="hstat-label">CRITICAL</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val susp" id="sw">0</div>
+      <div class="hstat-label">SUSPICIOUS</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val safe" id="ss">0</div>
+      <div class="hstat-label">SAFE</div>
+    </div>
+  </div>
+
+  <div class="h-threat-indicator">
+    <div class="threat-meter">
+      <span class="tm-label">THREAT LEVEL</span>
+      <div class="tm-bars">
+        <div class="tm-bar" id="tmb1"></div>
+        <div class="tm-bar" id="tmb2"></div>
+        <div class="tm-bar" id="tmb3"></div>
+        <div class="tm-bar" id="tmb4"></div>
+        <div class="tm-bar" id="tmb5"></div>
+      </div>
+    </div>
+
+    <div class="rate-chip">
+      <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="none" stroke="#00c3ff" stroke-width="1"/><path d="M4 2v2l1.5 1" stroke="#00c3ff" stroke-width="0.8"/></svg>
+      <span id="pktRate">0 P/S</span>
+    </div>
+
+    <div class="status-pill" id="statusPill">
+      <div class="pulse-dot"></div>
+      <span id="statusTxt">OFFLINE</span>
+    </div>
+
+    <button class="btn start" onclick="cmdStart()">▶ START</button>
+    <button class="btn stop"  onclick="cmdStop()">■ STOP</button>
+    <button class="btn reset" onclick="cmdReset()">↺ RESET</button>
+    <button class="btn report" onclick="window.open('/api/report')">⬇ REPORT</button>
+  </div>
+</header>
+
+<!-- ── LAYOUT ──────────────────────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- LEFT: Network Topology -->
+  <div class="panel p-left">
+    <div class="panel-head">
+      <div class="ph-dot"></div>
+      <div class="ph-title">NETWORK TOPOLOGY</div>
+      <div class="ph-badge" id="nodeCount">0 NODES</div>
+    </div>
+    <canvas id="netCanvas"></canvas>
+  </div>
+
+  <!-- CENTER TOP: Traffic Waveform -->
+  <div class="panel p-center-top">
+    <div class="panel-head">
+      <div class="ph-dot" style="background:var(--safe);box-shadow:0 0 5px var(--safe)"></div>
+      <div class="ph-title" style="color:var(--safe)">TRAFFIC WAVEFORM // PKT/SEC</div>
+      <div class="ph-badge" id="waveformStats">MAX: 0 | AVG: 0</div>
+    </div>
+    <canvas id="trafficCanvas"></canvas>
+  </div>
+
+  <!-- CENTER BOTTOM: Live Packet Feed -->
+  <div class="panel p-center-bot">
+    <div class="panel-head">
+      <div class="ph-dot" style="background:var(--purple);box-shadow:0 0 5px var(--purple)"></div>
+      <div class="ph-title" style="color:var(--purple)">LIVE PACKET FEED</div>
+      <div class="ph-badge" id="feedCount">0 EVENTS</div>
+    </div>
+    <div class="feed-header">
+      <span>TIME</span><span>SOURCE IP</span><span>PROTO</span><span>DETAIL</span><span>THREAT TYPE</span>
+    </div>
+    <div class="feed" id="feed"></div>
+  </div>
+
+  <!-- RIGHT TOP: Threat Distribution + Battle Log -->
+  <div class="panel p-right-top" style="display:flex;flex-direction:column;">
+    <div class="panel-head">
+      <div class="ph-dot" style="background:var(--crit);box-shadow:0 0 5px var(--crit)"></div>
+      <div class="ph-title" style="color:var(--crit)">THREAT DISTRIBUTION</div>
+    </div>
+    <div class="threat-section" id="threatSection">
+      <div class="tbar-row">
+        <div class="tbar-info"><span class="tbar-name">PORT SCAN</span><span class="tbar-count" style="color:var(--crit)" id="tb-ps">0</span></div>
+        <div class="tbar-track"><div class="tbar-fill c-scan" id="tf-ps"></div></div>
+      </div>
+      <div class="tbar-row">
+        <div class="tbar-info"><span class="tbar-name">BRUTE FORCE</span><span class="tbar-count" style="color:var(--purple)" id="tb-bf">0</span></div>
+        <div class="tbar-track"><div class="tbar-fill c-brute" id="tf-bf"></div></div>
+      </div>
+      <div class="tbar-row">
+        <div class="tbar-info"><span class="tbar-name">TRAFFIC FLOOD</span><span class="tbar-count" style="color:#ff7a00" id="tb-fl">0</span></div>
+        <div class="tbar-track"><div class="tbar-fill c-flood" id="tf-fl"></div></div>
+      </div>
+      <div class="tbar-row">
+        <div class="tbar-info"><span class="tbar-name">SENSITIVE PORT</span><span class="tbar-count" style="color:var(--susp)" id="tb-sp">0</span></div>
+        <div class="tbar-track"><div class="tbar-fill c-sens" id="tf-sp"></div></div>
+      </div>
+      <div class="tbar-row">
+        <div class="tbar-info"><span class="tbar-name">NORMAL</span><span class="tbar-count" style="color:var(--safe)" id="tb-nm">0</span></div>
+        <div class="tbar-track"><div class="tbar-fill c-normal" id="tf-nm"></div></div>
+      </div>
+    </div>
+
+    <!-- MITRE ATT&CK quick reference -->
+    <div class="mitre-section">
+      <div class="mitre-title">MITRE ATT&CK MAPPING</div>
+      <div class="mitre-row"><span class="mitre-id">T1046</span><span class="mitre-name">Network Service Discovery</span><span class="mitre-count" id="m-ps">0</span></div>
+      <div class="mitre-row"><span class="mitre-id">T1110</span><span class="mitre-name">Brute Force</span><span class="mitre-count" id="m-bf">0</span></div>
+      <div class="mitre-row"><span class="mitre-id">T1499</span><span class="mitre-name">Endpoint DoS</span><span class="mitre-count" id="m-fl">0</span></div>
+      <div class="mitre-row"><span class="mitre-id">T1021</span><span class="mitre-name">Remote Services</span><span class="mitre-count" id="m-sp">0</span></div>
+    </div>
+
+    <!-- Attacker vs Defender Battle Log -->
+    <div class="battle-wrap">
+      <div class="battle-col">
+        <div class="battle-head atk">⚡ ATTACKER ACTIONS</div>
+        <div class="battle-feed" id="atkFeed"></div>
+      </div>
+      <div class="battle-col">
+        <div class="battle-head def">🛡 DEFENDER RESPONSES</div>
+        <div class="battle-feed" id="defFeed"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT BOTTOM: Top Attackers + Heatmap -->
+  <div class="panel p-right-bot" style="display:flex;flex-direction:column;">
+    <div class="panel-head">
+      <div class="ph-dot" style="background:var(--susp);box-shadow:0 0 5px var(--susp)"></div>
+      <div class="ph-title" style="color:var(--susp)">TOP ATTACKERS</div>
+      <div class="ph-badge" id="atkTotal">0 SOURCES</div>
+    </div>
+    <div class="atk-list" id="atkList"></div>
+    <div class="heatmap-wrap">
+      <div class="panel-head">
+        <div class="ph-dot" style="background:#ff7a00;box-shadow:0 0 5px #ff7a00"></div>
+        <div class="ph-title" style="color:#ff7a00">ATTACK INTENSITY HEATMAP</div>
+      </div>
+      <canvas id="heatmapCanvas"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let last = -1, pollTimer = null;
+let trafficHistory = new Array(60).fill(0);
+let threatCounts = { PORT_SCAN:0, BRUTE_FORCE:0, TRAFFIC_FLOOD:0, SENSITIVE_PORT:0, NORMAL:0, PORT_SPREAD:0 };
+let heatData = new Array(60).fill(0);
+let nodes = {};
+let links = [];
+let animFrame = null;
+
+const LEVEL_COLOR = { critical: '#ff3a5c', suspicious: '#ffba0a', safe: '#00e87a' };
+
+const ATK_MSG = {
+  PORT_SCAN:     e => `scanning :${e.port} — ${e.detail}`,
+  BRUTE_FORCE:   e => `forcing :${e.port} repeatedly`,
+  TRAFFIC_FLOOD: e => `flood ${e.size}b pkts @ :${e.port}`,
+  SENSITIVE_PORT:e => `probe on sensitive :${e.port}`,
+  PORT_SPREAD:   e => `spreading across ports`,
+  NORMAL:        e => `→ :${e.port} [${e.proto}]`,
+};
+const DEF_MSG = {
+  LOG:          '📋 logged to SIEM',
+  MONITOR:      '👁 watchlist added',
+  BLOCK:        '🚫 IP blocked (firewall)',
+  RATE_LIMIT:   '⏱ rate-limit rule applied',
+  NULL_ROUTE:   '⛔ null-route: traffic dropped',
+  ALERT:        '🔔 SOC alert triggered',
+  NOTIFY_ADMIN: '📧 admin notification sent',
+};
+
+// ── Controls ───────────────────────────────────────────────────────────────
+async function cmdStart() {
+  await fetch('/api/start', { method: 'POST' });
+  setStatus('live', 'LIVE');
+  if (!pollTimer) pollTimer = setInterval(poll, 700);
+  startAnim();
+}
+async function cmdStop() {
+  await fetch('/api/stop', { method: 'POST' });
+  setStatus('paused', 'PAUSED');
+  clearInterval(pollTimer); pollTimer = null;
+}
+async function cmdReset() {
+  await fetch('/api/reset', { method: 'POST' });
+  setStatus('', 'OFFLINE');
+  clearInterval(pollTimer); pollTimer = null;
+  last = -1;
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('atkFeed').innerHTML = '';
+  document.getElementById('defFeed').innerHTML = '';
+  document.getElementById('atkList').innerHTML = '';
+  ['st','sc','sw','ss'].forEach(id => document.getElementById(id).textContent = '0');
+  trafficHistory = new Array(60).fill(0);
+  heatData = new Array(60).fill(0);
+  threatCounts = { PORT_SCAN:0, BRUTE_FORCE:0, TRAFFIC_FLOOD:0, SENSITIVE_PORT:0, NORMAL:0, PORT_SPREAD:0 };
+  nodes = {}; links = [];
+  updateThreatBars();
+  updateMitre();
+  updateThreatMeter(0);
+}
+
+function setStatus(cls, txt) {
+  const pill = document.getElementById('statusPill');
+  pill.className = 'status-pill' + (cls ? ' ' + cls : '');
+  document.getElementById('statusTxt').textContent = txt;
+}
+
+// ── Poll ───────────────────────────────────────────────────────────────────
+async function poll() {
+  try {
+    const r = await fetch(`/api/events?since=${last}`);
+    const d = await r.json();
+
+    document.getElementById('st').textContent = d.stats.total;
+    document.getElementById('sc').textContent = d.stats.critical;
+    document.getElementById('sw').textContent = d.stats.suspicious;
+    document.getElementById('ss').textContent = d.stats.safe;
+    document.getElementById('feedCount').textContent = d.stats.total + ' EVENTS';
+
+    // Threat level meter
+    const pctCrit = d.stats.total > 0 ? d.stats.critical / d.stats.total : 0;
+    updateThreatMeter(pctCrit);
+
+    // Traffic waveform
+    if (d.traffic_history?.length) {
+      trafficHistory = [...new Array(60).fill(0), ...d.traffic_history].slice(-60);
+    }
+    const cur = trafficHistory[trafficHistory.length - 1] || 0;
+    const max = Math.max(...trafficHistory, 0);
+    const avg = Math.round(trafficHistory.filter(Boolean).reduce((a,b)=>a+b,0) / (trafficHistory.filter(Boolean).length || 1));
+    document.getElementById('pktRate').textContent = cur + ' P/S';
+    document.getElementById('waveformStats').textContent = `MAX: ${max} | AVG: ${avg}`;
+
+    // Heatmap
+    if (d.attack_log) {
+      const now = Date.now() / 1000;
+      const buckets = new Array(60).fill(0);
+      d.attack_log.forEach(a => {
+        const idx = Math.min(59, Math.max(0, Math.floor((now - a.t) * 60 / 120)));
+        buckets[59 - idx] += a.level === 'critical' ? 3 : 1;
+      });
+      heatData = buckets;
+    }
+
+    // Top attackers
+    if (d.top_attackers?.length) {
+      const maxHits = d.top_attackers[0][1] || 1;
+      document.getElementById('atkTotal').textContent = d.top_attackers.length + ' SOURCES';
+      document.getElementById('atkList').innerHTML = d.top_attackers.map(([ip, count], i) => {
+        const pct = Math.round(count / maxHits * 100);
+        const rank = ['①','②','③','④','⑤'][i] || (i+1);
+        return `<div class="atk-row">
+          <span class="atk-rank">${rank}</span>
+          <div class="atk-info">
+            <span class="atk-ip">${ip}</span>
+            <div class="atk-bar-wrap"><div class="atk-bar" style="width:${pct}%"></div></div>
+          </div>
+          <span class="atk-hits">${count}</span>
+        </div>`;
+      }).join('');
+    }
+
+    // Events
+    let critFired = false;
+    for (const e of d.events) {
+      last = e.id;
+      ingestEvent(e);
+      if (e.level === 'critical' && !critFired) {
+        critFired = true;
+        showAlert('⚠ ' + e.type.replace('_', ' ') + ' DETECTED');
+      }
+    }
+  } catch(err) {}
+}
+
+// ── Ingest event ───────────────────────────────────────────────────────────
+function ingestEvent(e) {
+  // Feed row
+  const feed = document.getElementById('feed');
+  const row = document.createElement('div');
+  row.className = `feed-row ${e.level}`;
+  row.innerHTML = `
+    <span class="col-ts">${e.time}</span>
+    <span class="col-src" title="${e.src}">${e.src}</span>
+    <span class="col-proto">${e.proto}</span>
+    <span class="col-det" title="${e.detail}">:${e.port} · ${e.detail}</span>
+    <span class="badge ${e.level}">${e.type.replace(/_/g,' ')}</span>
+  `;
+  row.addEventListener('mouseover', ev => showTooltip(ev, e));
+  row.addEventListener('mouseout', hideTooltip);
+  feed.insertBefore(row, feed.firstChild);
+  while (feed.children.length > 300) feed.removeChild(feed.lastChild);
+
+  // Threat counts
+  if (e.type in threatCounts) threatCounts[e.type]++;
+  else if (e.type === 'PORT_SPREAD') threatCounts.PORT_SCAN++;
+  updateThreatBars();
+  updateMitre();
+
+  // Battle log
+  if (e.level !== 'safe') {
+    addBattle('atk', e.time, (ATK_MSG[e.type] || ATK_MSG.NORMAL)(e));
+  }
+  if (e.actions?.length) {
+    e.actions.forEach(a => addBattle('def', e.time, DEF_MSG[a] || a));
+  }
+
+  // Network graph
+  updateGraph(e);
+}
+
+function addBattle(side, ts, msg) {
+  const el = document.getElementById(side === 'atk' ? 'atkFeed' : 'defFeed');
+  const row = document.createElement('div');
+  row.className = `bevent ${side}`;
+  row.innerHTML = `<span class="bts">${ts}</span>${msg}`;
+  el.appendChild(row);
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 100) el.removeChild(el.firstChild);
+}
+
+// ── Threat bars ────────────────────────────────────────────────────────────
+function updateThreatBars() {
+  const total = Object.values(threatCounts).reduce((a,b)=>a+b,0) || 1;
+  const map = {
+    PORT_SCAN:    ['tb-ps','tf-ps'],
+    BRUTE_FORCE:  ['tb-bf','tf-bf'],
+    TRAFFIC_FLOOD:['tb-fl','tf-fl'],
+    SENSITIVE_PORT:['tb-sp','tf-sp'],
+    NORMAL:       ['tb-nm','tf-nm'],
+  };
+  for (const [type,[cid,fid]] of Object.entries(map)) {
+    const c = threatCounts[type] || 0;
+    document.getElementById(cid).textContent = c;
+    document.getElementById(fid).style.width = (c / total * 100) + '%';
+  }
+}
+
+function updateMitre() {
+  document.getElementById('m-ps').textContent = (threatCounts.PORT_SCAN || 0);
+  document.getElementById('m-bf').textContent = (threatCounts.BRUTE_FORCE || 0);
+  document.getElementById('m-fl').textContent = (threatCounts.TRAFFIC_FLOOD || 0);
+  document.getElementById('m-sp').textContent = (threatCounts.SENSITIVE_PORT || 0);
+}
+
+function updateThreatMeter(pct) {
+  const bars = [
+    document.getElementById('tmb1'),
+    document.getElementById('tmb2'),
+    document.getElementById('tmb3'),
+    document.getElementById('tmb4'),
+    document.getElementById('tmb5'),
+  ];
+  const level = pct > 0.5 ? 5 : pct > 0.35 ? 4 : pct > 0.2 ? 3 : pct > 0.08 ? 2 : pct > 0 ? 1 : 0;
+  bars.forEach((b, i) => {
+    b.className = 'tm-bar' + (i < level ? ` l${i+1}` : '');
+  });
+}
+
+// ── Network graph ──────────────────────────────────────────────────────────
+const TARGET_IP = '192.168.1.1';
+
+function updateGraph(e) {
+  const now = Date.now();
+  const canvas = document.getElementById('netCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const W = rect.width || 310, H = rect.height || 400;
+
+  if (!nodes[TARGET_IP]) {
+    nodes[TARGET_IP] = { x: W/2, y: H/2, vx:0, vy:0, type:'target', hits:0, lastSeen:now, ip:TARGET_IP };
+  }
+  nodes[TARGET_IP].lastSeen = now;
+
+  if (!nodes[e.src]) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 70 + Math.random() * 90;
+    nodes[e.src] = {
+      x: W/2 + Math.cos(angle)*r, y: H/2 + Math.sin(angle)*r,
+      vx: (Math.random()-.5)*.4, vy: (Math.random()-.5)*.4,
+      type: 'attacker', hits:0, lastSeen:now, ip: e.src
+    };
+  }
+  nodes[e.src].hits++;
+  nodes[e.src].lastSeen = now;
+  nodes[e.src].level = e.level;
+  if (e.level !== 'safe') nodes[e.src].type = 'attacker';
+
+  links.push({ src: e.src, dst: TARGET_IP, age: 0, level: e.level, maxAge: 45 });
+  if (links.length > 100) links.shift();
+
+  document.getElementById('nodeCount').textContent = Object.keys(nodes).length + ' NODES';
+}
+
+// ── Animation ──────────────────────────────────────────────────────────────
+function startAnim() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  function frame() {
+    drawTraffic();
+    drawNetwork();
+    drawHeatmap();
+    animFrame = requestAnimationFrame(frame);
+  }
+  frame();
+}
+startAnim();
+
+// ── Draw: Traffic Waveform ─────────────────────────────────────────────────
+function drawTraffic() {
+  const canvas = document.getElementById('trafficCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width) return;
+  if (canvas.width !== rect.width*dpr || canvas.height !== rect.height*dpr) {
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0,0,W,H);
+
+  const data = trafficHistory;
+  const maxVal = Math.max(...data, 8);
+  const n = data.length;
+  const bw = W / n;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(15,34,54,0.9)'; ctx.lineWidth = 1;
+  for (let g = 1; g <= 4; g++) {
+    const y = H - (g/4) * H * 0.85 - H*0.07;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    ctx.fillStyle = 'rgba(26,53,80,0.8)'; ctx.font = '8px Space Mono';
+    ctx.fillText(Math.round(maxVal*g/4), 4, y-2);
+  }
+
+  // Detect attack spikes
+  const avgVal = data.reduce((a,b)=>a+b,0) / n;
+  const spikeThreshold = avgVal * 2.5;
+
+  // Area gradient
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,  'rgba(0,195,255,0.35)');
+  grad.addColorStop(0.5,'rgba(0,195,255,0.1)');
+  grad.addColorStop(1,  'rgba(0,195,255,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.moveTo(0, H);
+  data.forEach((v,i) => {
+    const x = i * bw + bw/2;
+    const y = H - (v/maxVal)*(H*.85) - H*.06;
+    i===0 ? ctx.lineTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+
+  // Spike fills (red)
+  data.forEach((v,i) => {
+    if (v > spikeThreshold && v > 0) {
+      const x = i * bw;
+      const y = H - (v/maxVal)*(H*.85) - H*.06;
+      ctx.fillStyle = 'rgba(255,58,92,0.15)';
+      ctx.fillRect(x, y, bw, H - y);
+    }
+  });
+
+  // Main line
+  ctx.strokeStyle = '#00c3ff'; ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#00c3ff'; ctx.shadowBlur = 8;
+  ctx.beginPath();
+  data.forEach((v,i) => {
+    const x = i * bw + bw/2;
+    const y = H - (v/maxVal)*(H*.85) - H*.06;
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Spike dots
+  data.forEach((v,i) => {
+    if (v > spikeThreshold && v > 0) {
+      const x = i * bw + bw/2;
+      const y = H - (v/maxVal)*(H*.85) - H*.06;
+      ctx.fillStyle='#ff3a5c'; ctx.shadowColor='#ff3a5c'; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.arc(x,y,3.5,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+    }
+  });
+  ctx.setTransform(1,0,0,1,0,0);
+}
+
+// ── Draw: Network ──────────────────────────────────────────────────────────
+function drawNetwork() {
+  const canvas = document.getElementById('netCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  if (canvas.width !== rect.width*dpr || canvas.height !== rect.height*dpr) {
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    if (nodes[TARGET_IP]) { nodes[TARGET_IP].x = rect.width/2; nodes[TARGET_IP].y = rect.height/2; }
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0,0,W,H);
+
+  const now = Date.now();
+  // Prune stale nodes
+  Object.keys(nodes).forEach(ip => {
+    if (ip !== TARGET_IP && now - nodes[ip].lastSeen > 12000) delete nodes[ip];
+  });
+
+  // Animate + prune links
+  links.forEach(l => l.age++);
+  const activeLinks = links.filter(l => l.age < l.maxAge);
+
+  // Physics
+  const nlist = Object.values(nodes);
+  nlist.forEach(n => {
+    if (n.type === 'target') return;
+    nlist.forEach(m => {
+      if (m===n) return;
+      const dx = n.x-m.x, dy = n.y-m.y;
+      const d = Math.sqrt(dx*dx+dy*dy)||1;
+      if (d < 60) { n.vx += dx/d*.5; n.vy += dy/d*.5; }
+    });
+    const cx=W/2, cy=H/2;
+    const dx=n.x-cx, dy=n.y-cy;
+    const d=Math.sqrt(dx*dx+dy*dy)||1;
+    const targetR = 100 + nlist.indexOf(n) * 20;
+    const force = (d - targetR) * 0.009;
+    n.vx -= dx/d*force; n.vy -= dy/d*force;
+    n.vx *= 0.88; n.vy *= 0.88;
+    n.x += n.vx; n.y += n.vy;
+    n.x = Math.max(22, Math.min(W-22, n.x));
+    n.y = Math.max(22, Math.min(H-22, n.y));
+  });
+
+  // Draw orbit rings
+  ctx.strokeStyle = 'rgba(15,34,54,0.6)'; ctx.lineWidth = 1;
+  ctx.setLineDash([3,8]);
+  [100, 155].forEach(r => {
+    ctx.beginPath(); ctx.arc(W/2, H/2, r, 0, Math.PI*2); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // Draw links
+  activeLinks.forEach(l => {
+    const src = nodes[l.src], dst = nodes[l.dst];
+    if (!src || !dst) return;
+    const alpha = 1 - l.age / l.maxAge;
+    const color = LEVEL_COLOR[l.level] || '#00c3ff';
+    const t = l.age / l.maxAge;
+    const px = src.x + (dst.x - src.x) * t;
+    const py = src.y + (dst.y - src.y) * t;
+
+    ctx.globalAlpha = alpha * 0.4;
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.shadowColor = color; ctx.shadowBlur = 4;
+    ctx.setLineDash([3,5]);
+    ctx.beginPath(); ctx.moveTo(src.x,src.y); ctx.lineTo(dst.x,dst.y); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(px,py,3,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  });
+
+  // Draw nodes
+  Object.entries(nodes).forEach(([ip, n]) => {
+    const isTarget = n.type === 'target';
+    const color = isTarget ? '#00c3ff' :
+                  n.level==='critical' ? '#ff3a5c' :
+                  n.level==='suspicious' ? '#ffba0a' : '#00e87a';
+    const r = isTarget ? 18 : 7 + Math.min(n.hits*.7, 9);
+
+    // Outer glow
+    ctx.shadowColor = color; ctx.shadowBlur = isTarget ? 22 : 14;
+    ctx.fillStyle = color + '18';
+    ctx.beginPath(); ctx.arc(n.x,n.y,r+8,0,Math.PI*2); ctx.fill();
+
+    // Core
+    ctx.fillStyle = color; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Inner
+    ctx.fillStyle = isTarget ? 'rgba(0,195,255,0.3)' : 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.arc(n.x,n.y,r*.6,0,Math.PI*2); ctx.fill();
+
+    // Ring
+    ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 0.4;
+    ctx.beginPath(); ctx.arc(n.x,n.y,r+4,0,Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Label
+    ctx.fillStyle = '#c2e0f2';
+    ctx.font = isTarget ? 'bold 8px Orbitron' : '8px Space Mono';
+    ctx.textAlign = 'center';
+    const lbl = isTarget ? 'TARGET' : ip.split('.').slice(-2).join('.');
+    ctx.fillText(lbl, n.x, n.y + r + 13);
+    if (!isTarget && n.hits > 0) {
+      ctx.fillStyle = color; ctx.font = '7px Space Mono';
+      ctx.fillText(n.hits + 'x', n.x, n.y + r + 22);
+    }
+  });
+  ctx.setTransform(1,0,0,1,0,0);
+}
+
+// ── Draw: Heatmap ──────────────────────────────────────────────────────────
+function drawHeatmap() {
+  const canvas = document.getElementById('heatmapCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  if (canvas.width !== rect.width*dpr || canvas.height !== rect.height*dpr) {
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0,0,W,H);
+
+  const cols = 30, rows = 5;
+  const cw = W/cols, ch = H/rows;
+  const maxVal = Math.max(...heatData, 1);
+
+  for (let row=0; row<rows; row++) {
+    for (let col=0; col<cols; col++) {
+      const idx = Math.floor(col/cols*60);
+      const val = heatData[idx]||0;
+      const intensity = (val/maxVal) * (1 - row*0.1);
+      if (intensity < 0.04) {
+        ctx.fillStyle = `rgba(15,34,54,0.3)`;
+      } else {
+        const r2 = Math.min(255, Math.round(255 * Math.min(intensity*1.8,1)));
+        const g2 = Math.min(255, Math.round(70 * (1-intensity)));
+        const b2 = Math.min(255, Math.round(60 * (1-intensity)));
+        ctx.fillStyle = `rgba(${r2},${g2},${b2},${0.15 + intensity*0.75})`;
+      }
+      ctx.fillRect(col*cw+1, row*ch+1, cw-2, ch-2);
+    }
+  }
+  ctx.setTransform(1,0,0,1,0,0);
+}
+
+// ── Tooltip ────────────────────────────────────────────────────────────────
+function showTooltip(ev, e) {
+  const tt = document.getElementById('tooltip');
+  const lc = LEVEL_COLOR[e.level] || '#fff';
+  tt.innerHTML = `
+    <div class="tt-row"><span class="tt-key">TIME</span><span class="tt-val">${e.time}</span></div>
+    <div class="tt-row"><span class="tt-key">SOURCE</span><span class="tt-val">${e.src}</span></div>
+    <div class="tt-row"><span class="tt-key">DEST</span><span class="tt-val">${e.dst}:${e.port}</span></div>
+    <div class="tt-row"><span class="tt-key">PROTO</span><span class="tt-val">${e.proto} · ${e.size}b</span></div>
+    <div class="tt-row"><span class="tt-key">TYPE</span><span class="tt-val" style="color:${lc}">${e.type.replace(/_/g,' ')}</span></div>
+    <div class="tt-row"><span class="tt-key">LEVEL</span><span class="tt-val" style="color:${lc}">${e.level.toUpperCase()}</span></div>
+    <div class="tt-row"><span class="tt-key">DETAIL</span><span class="tt-val">${e.detail}</span></div>
+    <div class="tt-mitre">MITRE ATT&CK: ${e.mitre}</div>
+    ${e.actions?.length ? `<div class="tt-mitre" style="color:#00e87a;border-color:#00e87a">RESPONSE: ${e.actions.join(' → ')}</div>` : ''}
+  `;
+  tt.style.display = 'block';
+  tt.style.left = (ev.clientX + 14) + 'px';
+  tt.style.top  = Math.min(ev.clientY - 10, window.innerHeight - 220) + 'px';
+}
+function hideTooltip() { document.getElementById('tooltip').style.display='none'; }
+
+// ── Alert flash ────────────────────────────────────────────────────────────
+let alertCooldown = false;
+function showAlert(msg) {
+  if (alertCooldown) return;
+  alertCooldown = true;
+  const div = document.createElement('div');
+  div.className = 'alert-flash';
+  div.textContent = msg;
+  document.body.appendChild(div);
+  setTimeout(() => { div.remove(); alertCooldown = false; }, 2800);
+}
+</script>
+</body>
+</html>

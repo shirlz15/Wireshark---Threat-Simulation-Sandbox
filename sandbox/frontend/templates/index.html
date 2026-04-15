@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Simulation Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & tokens ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #080b12;
+  --surface:     #0e1118;
+  --surface2:    #141824;
+  --border:      #1c2235;
+  --border2:     #252d42;
+  --text:        #c8d0e4;
+  --muted:       #50607e;
+  --accent:      #4f7ef8;
+  --accent2:     #7c5cfc;
+
+  --safe:        #22c580;
+  --safe-bg:     rgba(34,197,128,.09);
+  --warn:        #f5a623;
+  --warn-bg:     rgba(245,166,35,.09);
+  --danger:      #f04f4f;
+  --danger-bg:   rgba(240,79,79,.09);
+  --purple:      #9d6ff8;
+  --purple-bg:   rgba(157,111,248,.09);
+
+  --mono:  'JetBrains Mono', monospace;
+  --sans:  'Syne', sans-serif;
+  --r:     10px;
+  --r-lg:  16px;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+/* ── Grid noise overlay ─────────────────────────────────────────────────── */
+body::before {
+  content:'';
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: .3;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,11,18,.85);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: 56px;
+  display: flex; align-items: center; gap: 14px;
+}
+.hd-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  letter-spacing: 2px; color: #fff; text-transform: uppercase;
+}
+.hd-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 10px var(--danger);
+  animation: blink 2s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.hd-badge {
+  margin-left: 16px;
+  font-family: var(--mono); font-size: 10px;
+  padding: 3px 10px; border-radius: 20px;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+}
+.hd-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.hd-btn {
+  background: none; border: 1px solid var(--border2);
+  color: var(--muted); font-size: 12px; font-family: var(--sans);
+  padding: 5px 14px; border-radius: 6px; cursor: pointer;
+  transition: all .15s;
+}
+.hd-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.layout {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
+  min-height: calc(100vh - 56px);
+  gap: 0;
+}
+
+/* ── Panels ─────────────────────────────────────────────────────────────── */
+.panel {
+  border-right: 1px solid var(--border);
+  padding: 20px 16px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+.panel-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--muted);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+
+/* ── Scenario cards ─────────────────────────────────────────────────────── */
+.sc-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all .2s;
+  background: var(--surface);
+  position: relative; overflow: hidden;
+}
+.sc-card::before {
+  content:''; position:absolute; left:0; top:0; bottom:0;
+  width: 3px; background: var(--accent); opacity:0; transition:.2s;
+}
+.sc-card:hover { border-color: var(--border2); background: var(--surface2); }
+.sc-card.active { border-color: var(--accent); background: var(--surface2); }
+.sc-card.active::before { opacity: 1; }
+.sc-card.active-red { border-color: var(--danger); }
+.sc-card.active-red::before { background: var(--danger); opacity:1; }
+.sc-card.active-amber { border-color: var(--warn); }
+.sc-card.active-amber::before { background: var(--warn); opacity:1; }
+.sc-card.active-purple { border-color: var(--purple); }
+.sc-card.active-purple::before { background: var(--purple); opacity:1; }
+.sc-card.active-orange { border-color: var(--warn); }
+.sc-card.active-orange::before { background: var(--warn); opacity:1; }
+
+.sc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sc-name { font-size: 13px; font-weight: 600; color: #fff; }
+.sc-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+/* ── Mode pills ─────────────────────────────────────────────────────────── */
+.mode-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.mode-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); font-size: 11px; font-family: var(--sans);
+  padding: 7px 6px; border-radius: 7px; cursor: pointer;
+  transition: all .15s; text-align: center; font-weight: 600;
+}
+.mode-btn:hover { border-color: var(--border2); color: var(--text); }
+.mode-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Speed slider ───────────────────────────────────────────────────────── */
+.speed-wrap { display: flex; flex-direction: column; gap: 6px; }
+.speed-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.speed-row input[type=range] { flex:1; accent-color: var(--accent); cursor: pointer; }
+.speed-val { font-family: var(--mono); font-size: 11px; color: var(--accent); min-width: 36px; }
+
+/* ── Run button ─────────────────────────────────────────────────────────── */
+.run-btn {
+  width: 100%; padding: 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none; border-radius: var(--r); color: #fff;
+  font-size: 13px; font-weight: 700; font-family: var(--sans);
+  cursor: pointer; transition: all .2s;
+  box-shadow: 0 4px 20px rgba(79,126,248,.25);
+  margin-top: auto;
+}
+.run-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(79,126,248,.35); }
+.run-btn:disabled { background: var(--muted); box-shadow: none; cursor: not-allowed; transform: none; }
+
+/* ── Upload zone ────────────────────────────────────────────────────────── */
+.upload-zone {
+  border: 1px dashed var(--border2); border-radius: var(--r);
+  padding: 16px; text-align: center; cursor: pointer;
+  transition: all .2s; position: relative;
+}
+.upload-zone:hover { border-color: var(--accent); background: rgba(79,126,248,.04); }
+.upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+.upload-zone p { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.upload-zone strong { color: var(--accent); font-size: 12px; }
+
+/* ── MAIN AREA ──────────────────────────────────────────────────────────── */
+main {
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 16px;
+  overflow-y: auto;
+}
+
+/* ── Summary bar ────────────────────────────────────────────────────────── */
+.summary-bar {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r); padding: 10px 12px;
+}
+.stat .s-lbl { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+.stat .s-val { font-family: var(--mono); font-size: 18px; font-weight: 600; color: #fff; }
+.stat.thr-CRITICAL .s-val { color: var(--danger); }
+.stat.thr-HIGH     .s-val { color: var(--danger); }
+.stat.thr-MEDIUM   .s-val { color: var(--warn); }
+.stat.thr-LOW      .s-val { color: var(--safe); }
+
+/* ── Timeline panel ─────────────────────────────────────────────────────── */
+.tl-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden; flex: 1;
+}
+.tl-header {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.tl-header-label {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 2px; text-transform: uppercase; color: var(--muted);
+}
+.tl-count {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+
+.tl-body { padding: 6px 0; min-height: 200px; }
+
+/* ── Event rows ─────────────────────────────────────────────────────────── */
+.ev-row {
+  display: grid; grid-template-columns: 76px 108px 1fr;
+  gap: 10px; padding: 9px 18px;
+  border-left: 3px solid transparent;
+  align-items: start;
+  opacity: 0; transform: translateX(-10px);
+  transition: opacity .3s ease, transform .3s ease;
+}
+.ev-row.in { opacity: 1; transform: translateX(0); }
+.ev-row.safe     { border-color: var(--safe);   background: var(--safe-bg); }
+.ev-row.suspicious { border-color: var(--warn); background: var(--warn-bg); }
+.ev-row.attack   { border-color: var(--danger); background: var(--danger-bg); }
+.ev-row.response { border-color: var(--purple); background: var(--purple-bg); }
+
+.ev-ts   { font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 2px; }
+.ev-badge {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px;
+  padding: 2px 9px; border-radius: 20px; display: inline-block;
+}
+.ev-badge.safe       { color: var(--safe);   background: var(--safe-bg);   border: 1px solid var(--safe); }
+.ev-badge.suspicious { color: var(--warn);   background: var(--warn-bg);   border: 1px solid var(--warn); }
+.ev-badge.attack     { color: var(--danger); background: var(--danger-bg); border: 1px solid var(--danger); }
+.ev-badge.response   { color: var(--purple); background: var(--purple-bg); border: 1px solid var(--purple); }
+
+.ev-detail { font-size: 13px; line-height: 1.45; color: var(--text); }
+.ev-explain { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; display: none; }
+.ev-action  { font-size: 11px; color: var(--purple); margin-top: 4px; display: none; }
+
+.explain-mode .ev-explain { display: block; }
+.explain-mode .ev-action  { display: block; }
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.empty {
+  padding: 60px 20px; text-align: center; color: var(--muted);
+}
+.empty-icon { font-size: 36px; margin-bottom: 12px; }
+.empty p { font-size: 13px; font-family: var(--mono); }
+
+/* ── Compare panel ──────────────────────────────────────────────────────── */
+.cmp-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden;
+  display: none;
+}
+.cmp-panel.show { display: block; }
+.cmp-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.cmp-col { padding: 16px 18px; }
+.cmp-col:first-child { border-right: 1px solid var(--border); }
+.cmp-col h3 { font-size: 11px; font-family: var(--mono); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+.cmp-col.bad  h3 { color: var(--danger); }
+.cmp-col.good h3 { color: var(--safe); }
+.cmp-col p { font-size: 13px; line-height: 1.6; }
+
+/* ── Right panel ────────────────────────────────────────────────────────── */
+.right-panel { padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+
+/* ── AI explanation box ─────────────────────────────────────────────────── */
+.ai-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden;
+}
+.ai-header {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.ai-header .ai-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent2); box-shadow: 0 0 6px var(--accent2);
+}
+.ai-header span { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.ai-body { padding: 14px; font-size: 12px; line-height: 1.7; color: var(--text); min-height: 80px; }
+.ai-body.loading { color: var(--muted); font-style: italic; }
+.ai-btn {
+  width: 100%; background: none; border: 1px solid var(--border2);
+  color: var(--accent2); font-size: 11px; font-family: var(--sans); font-weight: 600;
+  padding: 7px; cursor: pointer; border-radius: 6px; transition: all .15s;
+  margin: 0 14px 14px; width: calc(100% - 28px);
+}
+.ai-btn:hover { background: rgba(124,92,252,.08); }
+.ai-btn:disabled { color: var(--muted); cursor: not-allowed; }
+
+/* ── Duel panel ─────────────────────────────────────────────────────────── */
+.duel-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden;
+  display: none;
+}
+.duel-panel.show { display: block; }
+.duel-header {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.duel-header span { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.duel-grid { display: grid; grid-template-columns: 1fr 1px 1fr; }
+.duel-div { background: var(--border); }
+.duel-col { padding: 10px; }
+.duel-col-hd { font-size: 11px; font-family: var(--mono); margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.duel-col.atk .duel-col-hd { color: var(--danger); }
+.duel-col.def .duel-col-hd { color: var(--safe); }
+.duel-log { font-size: 11px; font-family: var(--mono); line-height: 1.8; max-height: 160px; overflow-y: auto; }
+.duel-log .dl { opacity: 0; transition: opacity .3s; }
+.duel-log .dl.in { opacity: 1; }
+.duel-log .dl .dt { color: var(--muted); font-size: 10px; margin-right: 4px; }
+.duel-log .dl.atk .dm { color: var(--danger); }
+.duel-log .dl.def .dm { color: var(--safe); }
+.duel-log .dl.neutral .dm { color: var(--muted); }
+.duel-outcome {
+  padding: 8px 10px; border-top: 1px solid var(--border);
+  font-size: 11px; font-family: var(--mono);
+}
+
+/* ── Pcap meter ─────────────────────────────────────────────────────────── */
+.meter-row {
+  display: flex; align-items: center; gap: 8px; font-size: 11px;
+}
+.meter-row .ml { color: var(--muted); min-width: 70px; }
+.meter-bar { flex:1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.meter-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+.meter-val { font-family: var(--mono); font-size: 11px; min-width: 28px; text-align: right; }
+
+/* ── Typing cursor ─────────────────────────────────────────────────────── */
+@keyframes cursor-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.cursor { display: inline-block; width: 6px; height: 13px; background: var(--accent); margin-left: 2px; vertical-align: text-bottom; animation: cursor-blink 1s infinite; border-radius: 1px; }
+
+/* ── Scan line animation on main bg ─────────────────────────────────────── */
+main::after {
+  content:''; position:fixed; top:0; left:260px; right:300px;
+  height: 2px; background: linear-gradient(90deg, transparent, rgba(79,126,248,.15), transparent);
+  animation: scan 4s linear infinite; pointer-events: none; z-index: 0;
+}
+@keyframes scan { 0%{top:56px} 100%{top:100vh} }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="hd-logo">
+    <div class="hd-dot"></div>
+    Threat Sandbox
+  </div>
+  <span class="hd-badge">EDUCATIONAL MODE — NO REAL ATTACKS</span>
+  <div class="hd-right">
+    <button class="hd-btn" onclick="exportPDF()" id="pdfBtn">Export PDF</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT PANEL -->
+  <aside class="panel">
+    <div class="panel-label">Scenarios</div>
+    <div id="scenarioList">
+      <div style="font-size:12px;color:var(--muted);font-family:var(--mono)">Loading...</div>
+    </div>
+
+    <div>
+      <div class="panel-label" style="margin-bottom:10px">Mode</div>
+      <div class="mode-row">
+        <button class="mode-btn active" id="mReplay"  onclick="setMode('replay',this)">Replay</button>
+        <button class="mode-btn"        id="mExplain" onclick="setMode('explain',this)">Explain</button>
+        <button class="mode-btn"        id="mCompare" onclick="setMode('compare',this)">Compare</button>
+        <button class="mode-btn"        id="mDuel"    onclick="setMode('duel',this)">Duel</button>
+      </div>
+    </div>
+
+    <div class="speed-wrap">
+      <div class="panel-label">Replay speed</div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speedSlider" min="300" max="2500" value="1000" step="100">
+        <span>Fast</span>
+        <span class="speed-val" id="speedVal">1.0s</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-label" style="margin-bottom:10px">Wireshark (.pcap)</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" accept=".pcap" id="pcapInput" onchange="uploadPcap(this)">
+        <p><strong>Drop .pcap file here</strong><br>or click to browse<br><br>Export from Wireshark:<br>File → Save As → .pcap</p>
+      </div>
+      <div id="pcapStatus" style="font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono)"></div>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="runSimulation()">▶ Run Simulation</button>
+  </aside>
+
+  <!-- MAIN -->
+  <main id="mainArea">
+    <div id="summaryBar" class="summary-bar" style="display:none"></div>
+
+    <div class="tl-panel">
+      <div class="tl-header">
+        <span class="tl-header-label">Event Timeline</span>
+        <span class="tl-count" id="evCount">—</span>
+      </div>
+      <div class="tl-body" id="tlBody">
+        <div class="empty">
+          <div class="empty-icon">🛡️</div>
+          <p>Select a scenario and click Run Simulation</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="cmp-panel" id="cmpPanel">
+      <div class="tl-header">
+        <span class="tl-header-label">Compare Mode</span>
+      </div>
+      <div class="cmp-grid">
+        <div class="cmp-col bad">
+          <h3>❌ Without Response</h3>
+          <p id="cmpWithout">—</p>
+        </div>
+        <div class="cmp-col good">
+          <h3>✅ With Response</h3>
+          <p id="cmpWith">—</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right-panel">
+
+    <!-- AI Explanation -->
+    <div class="panel-label">AI Security Analysis</div>
+    <div class="ai-box">
+      <div class="ai-header"><div class="ai-dot"></div><span>Claude AI</span></div>
+      <div class="ai-body" id="aiBody">Run a simulation first, then click Explain to get an AI breakdown of the attack.</div>
+      <button class="ai-btn" id="aiBtn" onclick="getAIExplanation()" disabled>✦ Explain this attack</button>
+    </div>
+
+    <!-- Threat meters -->
+    <div>
+      <div class="panel-label" style="margin-bottom:10px">Live Threat Meters</div>
+      <div style="display:flex;flex-direction:column;gap:8px" id="metersBox">
+        <div class="meter-row"><span class="ml">Brute Force</span><div class="meter-bar"><div class="meter-fill" id="m_bf" style="width:0%;background:var(--danger)"></div></div><span class="meter-val" id="mv_bf">0%</span></div>
+        <div class="meter-row"><span class="ml">Port Scan</span><div class="meter-bar"><div class="meter-fill" id="m_ps" style="width:0%;background:var(--warn)"></div></div><span class="meter-val" id="mv_ps">0%</span></div>
+        <div class="meter-row"><span class="ml">Takeover</span><div class="meter-bar"><div class="meter-fill" id="m_at" style="width:0%;background:var(--purple)"></div></div><span class="meter-val" id="mv_at">0%</span></div>
+        <div class="meter-row"><span class="ml">DDoS</span><div class="meter-bar"><div class="meter-fill" id="m_dd" style="width:0%;background:var(--accent)"></div></div><span class="meter-val" id="mv_dd">0%</span></div>
+      </div>
+    </div>
+
+    <!-- Duel panel -->
+    <div class="duel-panel" id="duelPanel">
+      <div class="duel-header"><span>Attacker vs Defender</span></div>
+      <div class="duel-grid">
+        <div class="duel-col atk">
+          <div class="duel-col-hd">Attacker</div>
+          <div class="duel-log" id="duelAtk"></div>
+        </div>
+        <div class="duel-div"></div>
+        <div class="duel-col def">
+          <div class="duel-col-hd">Defender</div>
+          <div class="duel-log" id="duelDef"></div>
+        </div>
+      </div>
+      <div class="duel-outcome" id="duelOutcome" style="color:var(--muted)">Waiting for simulation...</div>
+    </div>
+
+    <!-- Event detail -->
+    <div>
+      <div class="panel-label" style="margin-bottom:10px">Last Event Detail</div>
+      <div id="eventDetail" style="font-size:12px;color:var(--muted);font-family:var(--mono);line-height:1.7">
+        No events yet.
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let state = {
+  scenario: null,
+  mode: 'replay',
+  data: null,
+  timers: [],
+  running: false,
+};
+
+const DUEL_STEPS = {
+  brute_force: [
+    {a:{t:'neutral',m:'Launching credential stuffing script'}, d:{t:'neutral',m:'Normal login traffic — no flags'}},
+    {a:{t:'atk',m:'3 failures — rotating password list'},     d:{t:'neutral',m:'2 failures logged — below threshold'}},
+    {a:{t:'atk',m:'5 failures — trying defaults (admin/123)'},d:{t:'def',m:'Threshold crossed — alert fired'}},
+    {a:{t:'atk',m:'Switching to 10 parallel threads'},         d:{t:'def',m:'Rate spike — CAPTCHA injected'}},
+    {a:{t:'neutral',m:'CAPTCHA blocks script — attack stalls'},d:{t:'def',m:'IP blocked for 30 min — attack stopped'}},
+  ],
+  port_scan: [
+    {a:{t:'neutral',m:'Sending SYN probes on 22, 80, 443'},  d:{t:'neutral',m:'Common ports — not flagged'}},
+    {a:{t:'atk',m:'Probing 3306, 5432, 6379 (DB ports)'},    d:{t:'neutral',m:'DB port probes logged'}},
+    {a:{t:'atk',m:'Scanning 1000–9000 range, 8 ports/sec'},   d:{t:'def',m:'Rate anomaly — IDS alert fired'}},
+    {a:{t:'atk',m:'Found open: 8080, 27017 (MongoDB!)'},      d:{t:'def',m:'27017 closed + IP rate-limited'}},
+    {a:{t:'neutral',m:'All paths closed — scan useless'},      d:{t:'def',m:'Port closed, IP banned, ticket created'}},
+  ],
+  account_takeover: [
+    {a:{t:'neutral',m:'Logs in with leaked credentials'},     d:{t:'neutral',m:'Valid login — no immediate flag'}},
+    {a:{t:'atk',m:'Session from Minsk (RU) — unusual geo'},   d:{t:'def',m:'Geo anomaly flagged — soft alert'}},
+    {a:{t:'atk',m:'Bulk-exporting 4,000 records'},            d:{t:'def',m:'Volume spike — behavior alert'}},
+    {a:{t:'atk',m:'Tries to change account email'},           d:{t:'def',m:'MFA challenge forced — step-up auth'}},
+    {a:{t:'neutral',m:'No MFA device — locked out'},          d:{t:'def',m:'Session revoked — account secured'}},
+  ],
+  ddos: [
+    {a:{t:'neutral',m:'Sending 200 req/min — warming up'},   d:{t:'neutral',m:'Normal traffic rate'}},
+    {a:{t:'atk',m:'Ramping to 2,000 req/min'},               d:{t:'neutral',m:'Spike logged — monitoring'}},
+    {a:{t:'atk',m:'8,000 req/min — latency climbing'},       d:{t:'def',m:'CDN traffic scrubbing activated'}},
+    {a:{t:'atk',m:'50,000 req/min — full DDoS flood'},       d:{t:'def',m:'Rate limit applied — flood absorbed'}},
+    {a:{t:'neutral',m:'CDN wall hit — attack ineffective'},   d:{t:'def',m:'Server healthy — users unaffected'}},
+  ],
+};
+
+// ── Init ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  const res = await fetch('/api/scenarios');
+  const scenarios = await res.json();
+  renderScenarios(scenarios);
+
+  document.getElementById('speedSlider').addEventListener('input', function () {
+    document.getElementById('speedVal').textContent = (this.value / 1000).toFixed(1) + 's';
+  });
+});
+
+function renderScenarios(scenarios) {
+  const el = document.getElementById('scenarioList');
+  el.innerHTML = '';
+  let first = true;
+  for (const [key, sc] of Object.entries(scenarios)) {
+    const btn = document.createElement('div');
+    btn.className = 'sc-card' + (first ? ' active active-' + sc.color : '');
+    btn.dataset.key = key;
+    btn.dataset.color = sc.color;
+    btn.innerHTML = `<div class="sc-top"><span class="sc-name">${sc.label}</span></div><div class="sc-desc">${sc.description}</div>`;
+    btn.onclick = () => {
+      document.querySelectorAll('.sc-card').forEach(c => c.className = 'sc-card');
+      btn.className = 'sc-card active active-' + sc.color;
+      state.scenario = key;
+    };
+    el.appendChild(btn);
+    if (first) { state.scenario = key; first = false; }
+  }
+}
+
+// ── Mode ──────────────────────────────────────────────────────────────────
+function setMode(mode, btn) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.mode = mode;
+
+  document.getElementById('duelPanel').classList.toggle('show', mode === 'duel');
+  document.getElementById('cmpPanel').classList.toggle('show', mode === 'compare');
+
+  const tl = document.getElementById('tlBody');
+  if (mode === 'explain') tl.classList.add('explain-mode');
+  else tl.classList.remove('explain-mode');
+
+  if (state.data) {
+    if (mode === 'compare') renderCompare(state.data);
+    if (mode === 'duel') runDuel(state.data.scenario);
+  }
+}
+
+// ── Simulation ────────────────────────────────────────────────────────────
+async function runSimulation() {
+  if (state.running || !state.scenario) return;
+  state.running = true;
+  state.timers.forEach(clearTimeout);
+  state.timers = [];
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ Running...';
+  document.getElementById('aiBtn').disabled = true;
+
+  clearTimeline();
+
+  const res  = await fetch('/api/simulate', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ scenario: state.scenario }),
+  });
+  const data = await res.json();
+  state.data = data;
+
+  renderSummary(data.summary);
+  if (state.mode === 'compare') renderCompare(data);
+  if (state.mode === 'duel') runDuel(data.scenario);
+
+  const speed = parseInt(document.getElementById('speedSlider').value);
+  const events = data.timeline;
+  document.getElementById('evCount').textContent = events.length + ' events';
+
+  resetMeters();
+
+  events.forEach((ev, i) => {
+    const t = setTimeout(() => {
+      appendEvent(ev, state.mode === 'explain');
+      updateMeters(ev);
+      setLastEvent(ev);
+      if (i === events.length - 1) {
+        state.running = false;
+        btn.disabled = false; btn.textContent = '▶ Run Simulation';
+        document.getElementById('aiBtn').disabled = false;
+      }
+    }, i * speed);
+    state.timers.push(t);
+  });
+}
+
+function clearTimeline() {
+  document.getElementById('tlBody').innerHTML = '';
+  document.getElementById('summaryBar').style.display = 'none';
+  document.getElementById('cmpPanel').classList.remove('show');
+  document.getElementById('aiBody').textContent = 'Run a simulation first, then click Explain to get an AI breakdown.';
+  document.getElementById('eventDetail').textContent = 'No events yet.';
+  resetMeters();
+}
+
+function appendEvent(ev, explain) {
+  const row = document.createElement('div');
+  row.className = 'ev-row ' + ev.status;
+
+  const resp = ev.response ? `<div class="ev-action">⟶ ${ev.response.action} — ${ev.response.detail}</div>` : '';
+  row.innerHTML = `
+    <div class="ev-ts">${ev.timestamp}</div>
+    <div><span class="ev-badge ${ev.status}">${ev.status}</span></div>
+    <div>
+      <div class="ev-detail">${ev.detail}</div>
+      <div class="ev-explain">${ev.explanation}</div>
+      ${resp}
+    </div>`;
+
+  const tl = document.getElementById('tlBody');
+  tl.appendChild(row);
+  requestAnimationFrame(() => row.classList.add('in'));
+  tl.scrollTop = tl.scrollHeight;
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────
+function renderSummary(s) {
+  const bar = document.getElementById('summaryBar');
+  bar.style.display = 'grid';
+  bar.innerHTML = `
+    <div class="stat"><div class="s-lbl">Total</div><div class="s-val">${s.total_events}</div></div>
+    <div class="stat"><div class="s-lbl">Attacks</div><div class="s-val" style="color:var(--danger)">${s.attacks_detected}</div></div>
+    <div class="stat"><div class="s-lbl">Suspicious</div><div class="s-val" style="color:var(--warn)">${s.suspicious_events}</div></div>
+    <div class="stat"><div class="s-lbl">Responses</div><div class="s-val" style="color:var(--purple)">${s.responses_taken}</div></div>
+    <div class="stat"><div class="s-lbl">Unique IPs</div><div class="s-val">${s.unique_ips}</div></div>
+    <div class="stat thr-${s.threat_level}"><div class="s-lbl">Threat</div><div class="s-val">${s.threat_level}</div></div>`;
+}
+
+function renderCompare(data) {
+  document.getElementById('cmpPanel').classList.add('show');
+  document.getElementById('cmpWithout').textContent = data.compare.without;
+  document.getElementById('cmpWith').textContent    = data.compare.with;
+}
+
+// ── Meters ────────────────────────────────────────────────────────────────
+const meterMap = {
+  brute_force: { bar: 'm_bf', val: 'mv_bf', step: 20 },
+  port_scan:   { bar: 'm_ps', val: 'mv_ps', step: 20 },
+  account_takeover: { bar: 'm_at', val: 'mv_at', step: 25 },
+  ddos:        { bar: 'm_dd', val: 'mv_dd', step: 25 },
+};
+const meterVals = { m_bf: 0, m_ps: 0, m_at: 0, m_dd: 0 };
+
+function resetMeters() {
+  Object.values(meterMap).forEach(m => {
+    document.getElementById(m.bar).style.width = '0%';
+    document.getElementById(m.val).textContent = '0%';
+  });
+  Object.keys(meterVals).forEach(k => meterVals[k] = 0);
+}
+
+function updateMeters(ev) {
+  const sc = ev.scenario;
+  if (!meterMap[sc]) return;
+  const m = meterMap[sc];
+  if (ev.status === 'suspicious' || ev.status === 'attack') {
+    meterVals[m.bar] = Math.min(100, meterVals[m.bar] + m.step);
+    document.getElementById(m.bar).style.width = meterVals[m.bar] + '%';
+    document.getElementById(m.val).textContent = meterVals[m.bar] + '%';
+  }
+}
+
+// ── Last event detail ─────────────────────────────────────────────────────
+function setLastEvent(ev) {
+  document.getElementById('eventDetail').innerHTML = `
+    <span style="color:var(--muted)">time</span>   ${ev.timestamp}<br>
+    <span style="color:var(--muted)">type</span>   ${ev.type}<br>
+    <span style="color:var(--muted)">status</span> <span style="color:var(--${ev.status === 'safe' ? 'safe' : ev.status === 'suspicious' ? 'warn' : ev.status === 'attack' ? 'danger' : 'purple'})">${ev.status.toUpperCase()}</span><br>
+    <span style="color:var(--muted)">ip</span>     ${ev.ip}<br>
+    <span style="color:var(--muted)">src</span>    ${ev.source || 'simulated'}`;
+}
+
+// ── AI explanation ─────────────────────────────────────────────────────────
+async function getAIExplanation() {
+  if (!state.data) return;
+  const btn = document.getElementById('aiBtn');
+  const body = document.getElementById('aiBody');
+  btn.disabled = true; btn.textContent = 'Thinking...';
+  body.className = 'ai-body loading';
+  body.innerHTML = 'Claude is analysing the attack chain...<span class="cursor"></span>';
+
+  const res = await fetch('/api/ai_explain', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ events: state.data.timeline, scenario: state.data.scenario }),
+  });
+  const d = await res.json();
+  body.className = 'ai-body';
+  body.textContent = d.explanation;
+  btn.disabled = false; btn.textContent = '✦ Explain this attack';
+
+  // Save for PDF
+  state.data.ai_explanation = d.explanation;
+}
+
+// ── Duel ──────────────────────────────────────────────────────────────────
+let duelTimers = [];
+function runDuel(scenario) {
+  duelTimers.forEach(clearTimeout); duelTimers = [];
+  const steps = DUEL_STEPS[scenario] || DUEL_STEPS.brute_force;
+  const speed = parseInt(document.getElementById('speedSlider').value);
+  document.getElementById('duelAtk').innerHTML = '';
+  document.getElementById('duelDef').innerHTML = '';
+  document.getElementById('duelOutcome').textContent = 'Running duel...';
+  document.getElementById('duelOutcome').style.color = 'var(--muted)';
+
+  steps.forEach((step, i) => {
+    const t = setTimeout(() => {
+      addDuelLine('duelAtk', step.a.t === 'atk' ? 'atk' : 'neutral', step.a.m);
+      setTimeout(() => addDuelLine('duelDef', step.d.t === 'def' ? 'def' : 'neutral', step.d.m), 300);
+      if (i === steps.length - 1) {
+        setTimeout(() => {
+          document.getElementById('duelOutcome').textContent = '✅ Defense holds — attack stopped';
+          document.getElementById('duelOutcome').style.color = 'var(--safe)';
+        }, 600);
+      }
+    }, i * speed);
+    duelTimers.push(t);
+  });
+}
+
+function addDuelLine(boxId, cls, msg) {
+  const box = document.getElementById(boxId);
+  const now = new Date();
+  const ts = now.toTimeString().slice(0,8);
+  const line = document.createElement('div');
+  line.className = 'dl ' + cls;
+  line.innerHTML = `<span class="dt">${ts}</span><span class="dm">${msg}</span>`;
+  box.appendChild(line);
+  requestAnimationFrame(() => line.classList.add('in'));
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── Pcap upload ───────────────────────────────────────────────────────────
+async function uploadPcap(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('pcapStatus');
+  status.textContent = 'Uploading ' + file.name + '...';
+
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/upload_pcap', { method: 'POST', body: form });
+  const data = await res.json();
+
+  if (data.error) { status.textContent = 'Error: ' + data.error; return; }
+  status.textContent = `Loaded ${data.timeline.length} packets from Wireshark capture`;
+  state.data = data;
+  renderSummary(data.summary);
+  clearTimeline();
+  document.getElementById('summaryBar').style.display = 'grid';
+  renderSummary(data.summary);
+  data.timeline.forEach((ev, i) => {
+    const t = setTimeout(() => appendEvent(ev, false), i * 80);
+    state.timers.push(t);
+  });
+}
+
+// ── PDF export ─────────────────────────────────────────────────────────────
+async function exportPDF() {
+  if (!state.data) { alert('Run a simulation first.'); return; }
+  const btn = document.getElementById('pdfBtn');
+  btn.textContent = 'Generating...'; btn.disabled = true;
+
+  const res = await fetch('/api/export_pdf', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(state.data),
+  });
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'incident_report.pdf'; a.click();
+  URL.revokeObjectURL(url);
+  btn.textContent = 'Export PDF'; btn.disabled = false;
+}
+</script>
+</body>
+</html>
