@@ -230,3 +230,6 @@ if __name__ == "__main__":
     print()
 
     app.run(debug=False, port=5000, threaded=True, host="0.0.0.0")
+if __name__ == "__main__":
+    print("Server starting...")
+    app.run(debug=True)
