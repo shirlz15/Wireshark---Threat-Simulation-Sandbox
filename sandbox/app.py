@@ -1,7 +1,8 @@
 """
-app.py — Threat Simulation Sandbox
-Flask server + live simulation engine
-Run: python3 app.py
+app.py — Threat Simulation Sandbox v3.0
+Flask server + live simulation engine + LIVE PACKET CAPTURE
+Run: python3 app.py (simulation mode)
+Run: sudo python3 app.py (for live capture mode)
 Open: http://localhost:5000
 """
 
@@ -22,13 +23,25 @@ try:
 except ImportError:
     from detector import DetectionEngine
 
-# ── State ──────────────────────────────────────────────────────────────────
+# Import live capture module
+try:
+    from simulator import capture_live_packets, check_capture_permissions
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
+    print("⚠️  Warning: Scapy not installed. Live mode unavailable.")
+    print("   Install: pip install scapy --break-system-packages")
+
+# ── Global State ───────────────────────────────────────────────────────────
 engine          = DetectionEngine()
 events          = []
 running         = False
+MODE            = "simulation"  # "simulation" or "live"
 traffic_history = deque(maxlen=60)
 geo_hits        = defaultdict(int)
 attack_log      = []
+live_capture_thread = None
+permission_warning  = None
 
 # ── Simulation config ──────────────────────────────────────────────────────
 ATTACKER_IPS = [
@@ -66,8 +79,9 @@ _bucket_lock    = threading.Lock()
 _last_flush     = time.time()
 
 
-# ── Event factory ──────────────────────────────────────────────────────────
+# ── Event factory (SIMULATION MODE) ────────────────────────────────────────
 def make_event():
+    """Generate simulated event (original functionality)"""
     global _last_flush
 
     is_attack = random.random() < 0.45
@@ -106,6 +120,7 @@ def make_event():
         "mitre":   MITRE.get(result["threat_type"], "-"),
         "proto":   random.choice(["TCP", "TCP", "TCP", "UDP"]),
         "size":    random.randint(40, 1500),
+        "mode":    "simulation",
     }
 
     if ev["level"] in ("critical", "suspicious"):
@@ -116,14 +131,107 @@ def make_event():
     return ev
 
 
-# ── Simulation loop ────────────────────────────────────────────────────────
-def simulation_loop():
-    global running
-    while running:
-        events.append(make_event())
+# ── Process live packet (LIVE MODE) ────────────────────────────────────────
+def process_live_packet(packet_data):
+    """Process a single live packet and create an event"""
+    global _last_flush
+    
+    raw = {
+        "src_ip": packet_data["src_ip"],
+        "dst_ip": packet_data["dst_ip"],
+        "dst_port": packet_data["dst_port"]
+    }
+    
+    result = engine.analyze(raw)
+    actions = PLAYBOOK.get(result["threat_type"], [])
+    
+    # Update pkt/sec bucket
+    with _bucket_lock:
+        _packet_bucket.append(1)
+        now = time.time()
+        if now - _last_flush >= 1.0:
+            traffic_history.append(len(_packet_bucket))
+            _packet_bucket.clear()
+            _last_flush = now
+    
+    geo_hits[packet_data["src_ip"]] += 1
+    
+    ev = {
+        "id":      len(events),
+        "time":    packet_data["timestamp"],
+        "ms":      int(time.time() * 1000),
+        "src":     packet_data["src_ip"],
+        "dst":     packet_data["dst_ip"],
+        "port":    packet_data["dst_port"],
+        "level":   result["threat_level"],
+        "type":    result["threat_type"],
+        "detail":  result["detail"],
+        "actions": actions,
+        "mitre":   MITRE.get(result["threat_type"], "-"),
+        "proto":   packet_data["protocol"],
+        "size":    packet_data.get("size", 0),
+        "mode":    "live",
+    }
+    
+    if ev["level"] in ("critical", "suspicious"):
+        attack_log.append({"t": int(time.time()), "level": ev["level"], "type": ev["type"]})
+        if len(attack_log) > 200:
+            attack_log.pop(0)
+    
+    return ev
+
+
+# ── Live capture callback ──────────────────────────────────────────────────
+def live_packet_callback(packet_data):
+    """Callback for live packet capture - adds event to queue"""
+    if running and MODE == "live":
+        ev = process_live_packet(packet_data)
+        events.append(ev)
         if len(events) > 1000:
             events.pop(0)
-        time.sleep(random.uniform(0.15, 0.55))
+
+
+# ── Simulation/Live loop ───────────────────────────────────────────────────
+def simulation_loop():
+    """Main loop - switches between simulation and live mode"""
+    global running, MODE, live_capture_thread, permission_warning
+    
+    while running:
+        if MODE == "simulation":
+            # Original simulation mode
+            events.append(make_event())
+            if len(events) > 1000:
+                events.pop(0)
+            time.sleep(random.uniform(0.15, 0.55))
+            
+        elif MODE == "live":
+            # Live capture mode
+            if not SCAPY_AVAILABLE:
+                print("⚠️  Scapy not available, falling back to simulation mode")
+                MODE = "simulation"
+                continue
+            
+            # Check permissions
+            perm_check = check_capture_permissions()
+            if not perm_check["ok"]:
+                permission_warning = perm_check["error"]
+                print(f"⚠️  {permission_warning}")
+                print("   Falling back to simulation mode")
+                MODE = "simulation"
+                continue
+            
+            # Start live capture in background if not already running
+            if live_capture_thread is None or not live_capture_thread.is_alive():
+                print("🔴 LIVE CAPTURE MODE ACTIVE")
+                live_capture_thread = threading.Thread(
+                    target=capture_live_packets,
+                    args=(live_packet_callback, running),
+                    daemon=True
+                )
+                live_capture_thread.start()
+            
+            # Keep loop alive but let capture thread do the work
+            time.sleep(0.5)
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
@@ -138,26 +246,67 @@ def start():
     if not running:
         running = True
         threading.Thread(target=simulation_loop, daemon=True).start()
-    return jsonify({"ok": True, "running": running})
+    return jsonify({"ok": True, "running": running, "mode": MODE})
 
 
 @app.route("/api/stop", methods=["POST"])
 def stop():
-    global running
+    global running, live_capture_thread
     running = False
-    return jsonify({"ok": True, "running": running})
+    live_capture_thread = None  # Will be cleaned up by daemon
+    return jsonify({"ok": True, "running": running, "mode": MODE})
 
 
 @app.route("/api/reset", methods=["POST"])
 def reset():
-    global running, events, engine
+    global running, events, engine, live_capture_thread
     running = False
     events  = []
     engine  = DetectionEngine()
     traffic_history.clear()
     geo_hits.clear()
     attack_log.clear()
+    live_capture_thread = None
     return jsonify({"ok": True})
+
+
+@app.route("/api/mode", methods=["POST"])
+def set_mode():
+    """Switch between simulation and live mode"""
+    global MODE, permission_warning
+    
+    data = request.get_json()
+    requested_mode = data.get("mode", "simulation")
+    
+    if requested_mode not in ["simulation", "live"]:
+        return jsonify({"ok": False, "error": "Invalid mode. Use 'simulation' or 'live'"}), 400
+    
+    # Check if live mode is available
+    if requested_mode == "live":
+        if not SCAPY_AVAILABLE:
+            return jsonify({
+                "ok": False,
+                "error": "Scapy not installed. Install with: pip install scapy --break-system-packages",
+                "mode": MODE
+            }), 400
+        
+        # Check permissions
+        perm_check = check_capture_permissions()
+        if not perm_check["ok"]:
+            return jsonify({
+                "ok": False,
+                "error": perm_check["error"],
+                "mode": MODE
+            }), 403
+    
+    MODE = requested_mode
+    permission_warning = None
+    
+    return jsonify({
+        "ok": True,
+        "mode": MODE,
+        "message": f"Switched to {MODE} mode"
+    })
 
 
 @app.route("/api/events")
@@ -172,10 +321,13 @@ def get_events():
     return jsonify({
         "events":          new_evs,
         "running":         running,
+        "mode":            MODE,
         "stats":           {"total": total, "critical": crit, "suspicious": susp, "safe": safe},
         "traffic_history": list(traffic_history),
         "top_attackers":   sorted(geo_hits.items(), key=lambda x: -x[1])[:5],
         "attack_log":      attack_log[-60:],
+        "permission_warning": permission_warning,
+        "scapy_available": SCAPY_AVAILABLE,
     })
 
 
@@ -183,8 +335,11 @@ def get_events():
 def status():
     return jsonify({
         "running": running,
+        "mode": MODE,
         "total_events": len(events),
-        "engine": "DetectionEngine v2",
+        "engine": "DetectionEngine v3",
+        "scapy_available": SCAPY_AVAILABLE,
+        "permission_warning": permission_warning,
     })
 
 
@@ -196,6 +351,7 @@ def report():
         "  THREAT SIMULATION SANDBOX — INCIDENT REPORT",
         "=" * 60,
         f"  Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"  Mode      : {MODE.upper()}",
         f"  Total     : {len(events)} events",
         f"  Critical  : {sum(1 for e in events if e['level']=='critical')}",
         f"  Suspicious: {sum(1 for e in events if e['level']=='suspicious')}",
@@ -205,8 +361,9 @@ def report():
     ]
     for e in events[-100:]:
         actions = ", ".join(e["actions"]) if e["actions"] else "—"
+        mode_badge = f"[{e.get('mode', 'sim').upper()}]"
         lines.append(
-            f"[{e['time']}]  {e['level'].upper():<12}  {e['type']:<20}"
+            f"[{e['time']}] {mode_badge:<7} {e['level'].upper():<12}  {e['type']:<20}"
             f"  src={e['src']}  port={e['port']}  {e['detail']}"
             f"  | actions: {actions}"
         )
@@ -224,12 +381,22 @@ if __name__ == "__main__":
 
     print()
     print("  ╔══════════════════════════════════════════╗")
-    print("  ║   THREAT SIMULATION SANDBOX  v2.0        ║")
-    print("  ║   → http://localhost:5000                 ║")
+    print("  ║   THREAT SIMULATION SANDBOX  v3.0        ║")
+    print("  ║   → http://localhost:5000                ║")
     print("  ╚══════════════════════════════════════════╝")
+    print()
+    print(f"  Mode: {MODE}")
+    
+    if SCAPY_AVAILABLE:
+        print("  ✓ Scapy available - Live mode ready")
+        perm = check_capture_permissions()
+        if not perm["ok"]:
+            print(f"  ⚠️  {perm['error']}")
+            print("     Live mode requires: sudo python3 app.py")
+    else:
+        print("  ⚠️  Scapy not installed - Simulation mode only")
+        print("     Install: pip install scapy --break-system-packages")
+    
     print()
 
     app.run(debug=False, port=5000, threaded=True, host="0.0.0.0")
-if __name__ == "__main__":
-    print("Server starting...")
-    app.run(debug=True)
