@@ -1,5 +1,5 @@
 flask>=3.0
 flask-cors>=4.0
 fpdf2>=2.7
-# tshark via system package: sudo apt install tshark
-# No Scapy needed — tshark subprocess used for live capture
+# tshark installed via system package: sudo apt install tshark
+# scapy optional: pip install scapy --break-system-packages
