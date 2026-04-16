@@ -1,94 +1,160 @@
-# ⬡ Threat Simulation Sandbox — Live Network Security Lab
+# Cyber Threat Simulation Sandbox v4.0
+## Behavioral Analysis + Live Capture + Scenario Injection
 
-A real-time network threat detection and visualization dashboard built on Kali Linux, combining Python Flask, animated canvas visualizations, and a rule-based detection engine.
+---
 
-## 🖥 Dashboard Features
+## System Architecture
 
-| Panel | What it shows |
-|---|---|
-| **Network Topology** | Live animated graph — attacker nodes orbit target, packet animations fly along links, nodes glow red/yellow/green by threat level |
-| **Traffic Waveform** | Real-time packets/sec graph with attack spikes highlighted in red |
-| **Live Packet Feed** | Scrolling event table with timestamps, IPs, protocol, detail, and MITRE mapping on hover |
-| **Threat Distribution** | 5 animated progress bars — Port Scan / Brute Force / Flood / Sensitive Port / Normal |
-| **Attacker vs Defender** | Split battle log — attacker actions left, automated defender responses right |
-| **Top Attackers** | Live ranked list of most active source IPs with hit bars |
-| **Attack Heatmap** | 2D intensity grid showing attack concentration over time |
+```
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 1: Packet Capture                                     │
+│  tshark subprocess → TSV field extraction → packet metadata  │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 2: Behavioral Pattern Engine                          │
+│  Per-IP BehaviorFingerprint · Sliding windows (5/10/30s)    │
+│  7-rule priority chain · Confidence scoring · Phase tracking │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 3: Simulation Engine                                  │
+│  5 named attack scenarios · Synthetic event injection        │
+│  Defender playbook with automated responses                  │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 4: Flask API                                          │
+│  /api/events  /api/simulate  /api/replay  /api/fingerprint  │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 5: Visualization                                      │
+│  Canvas topology · Live feed · Replay slider · Scenario UI  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-cd /home/kali/sandbox
+# 1. Install dependencies
 pip install flask --break-system-packages
+
+# 2. Run (simulation mode — no privileges needed)
 python3 app.py
+
+# 3. Run with live capture (requires tshark)
+sudo apt install tshark
+sudo python3 app.py
+
+# 4. Open browser
+firefox http://localhost:5000
 ```
 
-Open Firefox → `http://localhost:5000` → click **▶ START**
-
-## 🔬 Real Traffic Mode (Metasploit + Wireshark)
-
-**Terminal 1 — tcpdump:**
-```bash
-sudo tcpdump -i eth0 -n -l -tttt ip > /home/kali/sandbox/capture/live.log
-```
-
-**Terminal 2 — sandbox:**
-```bash
-python3 /home/kali/sandbox/app.py
-```
-
-**Terminal 3 — Metasploit port scan (triggers CRITICAL in ~3 seconds):**
-```bash
-sudo msfconsole
-use auxiliary/scanner/portscan/syn
-set RHOSTS 10.1.17.239     # your Kali IP
-set PORTS 21-443
-set THREADS 10
-run
-```
-
-**Wireshark filter to see the scan:**
-```
-tcp.flags.syn == 1 && tcp.flags.ack == 0
-```
-
-## 🕵 Detection Rules
-
-| Rule | Trigger | Level |
-|---|---|---|
-| PORT_SCAN | 8+ unique ports in 30s | CRITICAL |
-| BRUTE_FORCE | 8+ hits on SSH/RDP/DB port in 30s | CRITICAL |
-| TRAFFIC_FLOOD | 40+ packets from one IP in 30s | CRITICAL |
-| SENSITIVE_PORT | Any probe on port 21/22/23/3389/3306 etc | SUSPICIOUS |
-| PORT_SPREAD | 4–7 unique ports in window | SUSPICIOUS |
-
-## 🗂 Project Structure
+## Project Structure
 
 ```
 sandbox/
-├── app.py                     ← Flask server + simulation engine
+├── app.py                          ← Flask server + all logic
 ├── backend/
 │   ├── __init__.py
-│   └── detector.py            ← Stateful detection engine
+│   └── detector.py                 ← Behavioral pattern engine v4
 ├── frontend/
 │   └── templates/
-│       └── dashboard.html     ← Full animated UI (canvas graphs)
-├── capture/                   ← Drop pcap/tcpdump files here
-├── reports/                   ← Exported incident reports
+│       └── dashboard.html          ← Full UI (tabs, replay, scenarios)
+├── capture/                        ← Drop pcap files here
+├── reports/                        ← Exported incident reports
+├── requirements.txt
 └── README.md
 ```
 
-## 📊 MITRE ATT&CK Mapping
+## Detection Rules
 
-| Detection | MITRE ID |
-|---|---|
-| PORT_SCAN | T1046 — Network Service Discovery |
-| BRUTE_FORCE | T1110 — Brute Force |
-| TRAFFIC_FLOOD | T1499 — Endpoint Denial of Service |
-| SENSITIVE_PORT | T1021 — Remote Services |
+| Rule | Trigger | Level | Confidence |
+|------|---------|-------|------------|
+| PORT_SCAN | 12+ unique ports in 30s | CRITICAL | 60–99% |
+| BRUTE_FORCE | 6+ hits on critical port in 10s | CRITICAL | 55–98% |
+| TRAFFIC_FLOOD | 25+ packets in 5s | CRITICAL | 50–97% |
+| RECON_SEQUENCE | Wide scan → sensitive port pivot | SUSPICIOUS | 62–82% |
+| SENSITIVE_PORT | Repeated DB/admin access | SUSPICIOUS | 45–75% |
+| PORT_SPREAD | 4+ distinct ports in 10s | SUSPICIOUS | 30–50% |
+| NORMAL | No pattern detected | SAFE | 95% |
 
-## 🔧 Requirements
+## API Reference
 
-- Python 3.8+
-- Flask (`pip install flask --break-system-packages`)
-- Kali Linux (or any Linux with tcpdump/tshark available)
-- Firefox or Chromium for the dashboard
+```
+GET  /api/events?since=N         Poll new events
+GET  /api/replay?pct=0-100       Replay last 500 events at position
+POST /api/simulate               Inject scenario: {type: "port_scan"}
+GET  /api/scenarios              List available scenarios
+GET  /api/fingerprint/:ip        Get behavioral fingerprint for IP
+POST /api/mode                   Switch mode: {mode: "simulation"|"live"}
+GET  /api/report                 Download incident report (text)
+GET  /api/status                 System health check
+```
+
+## Available Scenarios
+
+- `port_scan` — 12-port systematic sweep
+- `brute_force` — 15-hit SSH credential attack
+- `db_harvest` — Web recon → DB probe → MySQL brute
+- `ddos` — 40-packet volumetric flood
+- `lateral_movement` — SMB + RDP + SSH chain
+
+## Attack Phase Tracking
+
+Each attacker IP moves through a lifecycle that only advances forward:
+
+```
+IDLE → RECON → EXPLOIT → IMPACT
+```
+
+This enables detection of multi-stage attacks even when individual
+packets appear benign in isolation.
+
+## Novel Features (v4.0)
+
+1. **Confidence Scoring** — Every detection outputs 0–100% confidence
+   with rule-based reasoning (not labels)
+
+2. **Behavioral Sequence Detection** — Detects recon-then-exploit chains
+   as a single threat, not separate events
+
+3. **Explainable Detections** — Every event includes a plain-English
+   explanation of *why* it was flagged
+
+4. **tshark Integration** — Uses Wireshark CLI instead of Scapy,
+   requiring only system package install
+
+5. **Replay System** — Slider-based event replay for post-incident analysis
+
+6. **Scenario Injection API** — POST /api/simulate injects realistic
+   multi-step attack sequences into the live stream
+
+## Live Capture (Linux/Kali)
+
+```bash
+# Install tshark
+sudo apt install tshark
+
+# Start with live capture
+sudo python3 app.py
+
+# Toggle to LIVE mode in UI
+# Or via API:
+curl -X POST http://localhost:5000/api/mode \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "live"}'
+```
+
+## Inject an Attack Scenario
+
+```bash
+# Port scan (triggers CRITICAL in ~3 seconds)
+curl -X POST http://localhost:5000/api/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"type": "port_scan"}'
+
+# Database harvest sequence
+curl -X POST http://localhost:5000/api/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"type": "db_harvest"}'
+```
+
+## Replay
+
+Navigate to the **Replay** tab and drag the slider from 0–100%
+to replay any time window of the last 500 captured events.
+Useful for post-incident analysis and training exercises.
